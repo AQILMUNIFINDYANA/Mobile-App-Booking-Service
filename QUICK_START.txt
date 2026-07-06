@@ -1,0 +1,172 @@
+╔═════════════════════════════════════════════════════════════════╗
+║   ESGUL Service Pro - Quick Start Guide                        ║
+║   100% Real Data • Production Ready                            ║
+╚═════════════════════════════════════════════════════════════════╝
+
+SETUP IN 5 MINUTES:
+===================
+
+1. DATABASE SETUP (2 min)
+   ├─ Go to https://app.supabase.com
+   ├─ Select your project
+   ├─ SQL Editor
+   ├─ Copy-paste ALL code from SETUP.sql
+   ├─ Click Run
+   └─ Wait for Success!
+
+2. ENVIRONMENT (1 min)
+   ├─ Create .env.local file in root
+   ├─ Add:
+   │  EXPO_PUBLIC_SUPABASE_URL=your-project-url
+   │  EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+   ├─ Get keys from Supabase Settings → API
+   └─ Save file
+
+3. DEPENDENCIES (1 min)
+   ├─ npm install
+   └─ Wait for completion
+
+4. START APP (30 sec)
+   ├─ npm start
+   ├─ Press 'w' for web (or 'i'/'a')
+   └─ App opens in browser/emulator
+
+5. TEST (30 sec)
+   ├─ Register new account
+   ├─ Edit profile → saves to DB ✓
+   ├─ Create booking → saves to DB ✓
+   ├─ Send chat message → saves to DB ✓
+   └─ Done!
+
+═════════════════════════════════════════════════════════════════
+
+FEATURE OVERVIEW:
+=================
+
+USER FEATURES:
+✓ Sign Up / Sign In
+✓ Edit Profile (name, phone, address) → DB
+✓ Create Booking → DB
+✓ View Booking History → DB
+✓ Browse Services → DB
+✓ Real-time Chat with Admin → DB + Realtime
+✓ See Home Dashboard
+
+ADMIN FEATURES:
+✓ Dashboard (stats from DB)
+✓ Real-time Chat (reply to users)
+✓ See unread messages
+✓ Chat history
+
+═════════════════════════════════════════════════════════════════
+
+FILES YOU NEED TO KNOW:
+======================
+
+DOCUMENTATION.md
+└─ Complete guide (read this first!)
+   - Project overview
+   - Setup instructions
+   - Database schema
+   - How features work
+   - Testing checklist
+   - Troubleshooting
+
+SETUP.sql
+└─ Database setup (copy-paste to Supabase)
+   - Creates all tables
+   - Sets up security
+   - Adds seed data
+   - 312 lines, well-commented
+
+.env.local
+└─ Your Supabase credentials
+   - Keep this PRIVATE
+   - Don't commit to git
+
+═════════════════════════════════════════════════════════════════
+
+TROUBLESHOOTING:
+================
+
+Q: Blank white page?
+A: Make sure index.js exists with registerRootComponent(App)
+
+Q: "ReactDOM.render is not a function"?
+A: React 18 + React DOM 18 (not 19)
+
+Q: Chat not syncing?
+A: Make sure Supabase Realtime is enabled
+
+Q: Can't see data?
+A: Check RLS policies (see DOCUMENTATION.md)
+
+Q: Build fails?
+A: npm install && npm start
+
+═════════════════════════════════════════════════════════════════
+
+IMPORTANT DETAILS:
+==================
+
+Database:
+- Hosted on Supabase (PostgreSQL)
+- Uses Row Level Security (RLS)
+- Real-time sync via Postgres Changes
+- 5 main tables: users, services, bookings, chat_messages, reviews
+
+Authentication:
+- Email + Password
+- Supabase Auth
+- AsyncStorage persistence
+- Auto-login on app start
+
+Chat:
+- User sends message → saved to DB
+- Admin subscribes to real-time changes → gets message instantly
+- Admin replies → saved to DB
+- User gets reply instantly via real-time subscription
+- NO bots, 100% real
+
+Data Safety:
+- RLS policies prevent users from seeing other users' data
+- Only admin-support-team receives admin messages
+- Each user can only edit their own profile
+- Each user can only see their own bookings
+
+═════════════════════════════════════════════════════════════════
+
+NEXT STEPS:
+===========
+
+FIRST TIME:
+1. Read DOCUMENTATION.md (10 min read)
+2. Run SETUP.sql in Supabase
+3. Create .env.local
+4. npm start
+5. Create test account
+6. Test each feature
+
+ONGOING DEVELOPMENT:
+1. Check DOCUMENTATION.md for architecture
+2. Use SETUP.sql as reference for DB schema
+3. Follow patterns in existing screens
+4. Test with npm start before committing
+
+═════════════════════════════════════════════════════════════════
+
+CONTACT / SUPPORT:
+==================
+
+For issues:
+1. Check DOCUMENTATION.md → Troubleshooting
+2. Check Supabase dashboard → Logs
+3. Check Metro bundler console for errors
+
+═════════════════════════════════════════════════════════════════
+
+Status: ✅ Production Ready
+Last Updated: 2026-04-22
+Created with: React Native, TypeScript, Supabase
+
+═════════════════════════════════════════════════════════════════

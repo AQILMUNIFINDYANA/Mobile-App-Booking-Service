@@ -1,0 +1,8 @@
+{
+  "bundler": "metro",
+  "metro": {
+    "watch": {
+      "use": "watchman"
+    }
+  }
+}

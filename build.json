@@ -1,0 +1,44 @@
+{
+  "id": "64334085-aab0-4cae-819f-91cbf5a9ed96",
+  "status": "ERRORED",
+  "platform": "ANDROID",
+  "error": {
+    "errorCode": "EAS_BUILD_UNKNOWN_GRADLE_ERROR",
+    "message": "Gradle build failed with unknown error. See logs for the \"Run gradlew\" phase for more information."
+  },
+  "artifacts": {},
+  "initiatingActor": {
+    "id": "80e8c085-22bd-495f-9f2a-f93fc0c41863",
+    "displayName": "aqilmunifindyana"
+  },
+  "logFiles": [
+    "https://storage.googleapis.com/eas-workflows-production/logs/b396dea7-b2a7-450d-9504-59e5f86b35ac/64334085-aab0-4cae-819f-91cbf5a9ed96/2026-07-05T11%3A39%3A02Z-e330ef86-ab86-400c-bd36-2e8c16c4136a.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260705%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260705T114310Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=6abcbbeda5a19be5f5940168eb4e68f7d258c46682fe84ca2a4e38fcd9e58bf391555eb0cb72908caed6c6a0e43abc948adc45d092501b0d155fc86afd0c2655f4bffd1a728e7584975a8ad2d7503ff618ffb2b5fa54471db5b520375aea22c1abf29d0f212c9508a0284235cee7e83d7afe8501a74edab3d650705b997ae353d82f9b0ca387995fd8c992035b24824feb99098c3a9416c3051b6e2e54b1e1cde70b4ad27574ce8f218e468615fcbbd2349cf44b2596b3358b921792c7a101eadf0770be2d70e1c49891e6e138da9edf640b2c8d0af054834f7a2032799b3f7136d07b55fa2180b816cd2e1dc7f8a16a28c721b0a3e71a83c7a1bbe3374d831a"
+  ],
+  "project": {
+    "id": "b396dea7-b2a7-450d-9504-59e5f86b35ac",
+    "name": "esgul-service-pro",
+    "slug": "esgul-service-pro",
+    "ownerAccount": {
+      "id": "11c39be2-19c7-4ea6-a6ad-fed18762503e",
+      "name": "aqilmunifindyana"
+    }
+  },
+  "distribution": "INTERNAL",
+  "buildProfile": "preview",
+  "sdkVersion": "51.0.0",
+  "appVersion": "1.0.0",
+  "appBuildVersion": "1",
+  "gitCommitHash": "aaab9744253eb0e0ebb8ab02743e23ea963f5358",
+  "gitCommitMessage": "Fix babel-preset-expo version compatibility for Expo SDK 51",
+  "priority": "NORMAL",
+  "createdAt": "2026-07-05T11:38:52.355Z",
+  "updatedAt": "2026-07-05T11:43:53.149Z",
+  "completedAt": "2026-07-05T11:43:52.942Z",
+  "expirationDate": "2026-07-19T11:38:52.387Z",
+  "isForIosSimulator": false,
+  "metrics": {
+    "buildWaitTime": 9714,
+    "buildQueueTime": 4870,
+    "buildDuration": 286003
+  }
+}
