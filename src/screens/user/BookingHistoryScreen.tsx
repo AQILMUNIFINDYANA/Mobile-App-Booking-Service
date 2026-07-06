@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { View, StyleSheet, ScrollView, FlatList, Text, TouchableOpacity, Modal, Alert, ActivityIndicator } from 'react-native'
+import { View, StyleSheet, ScrollView, FlatList, Text, TouchableOpacity, Modal, Alert, ActivityIndicator, RefreshControl } from 'react-native'
 import { Button, TextInput } from 'react-native-paper'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
@@ -26,6 +26,7 @@ export const BookingHistoryScreen: React.FC = () => {
   const { user } = useAuth()
   const [bookings, setBookings] = useState<Booking[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
 
   const [showReviewModal, setShowReviewModal] = useState(false)
   const [isViewOnly, setIsViewOnly] = useState(false)
@@ -49,10 +50,11 @@ export const BookingHistoryScreen: React.FC = () => {
         {
           event: '*',
           schema: 'public',
-          table: 'bookings',
-          filter: `user_id=eq.${user.id}`,
+          table: 'bookings'
         },
         (payload) => {
+          // Verify if it belongs to the user, or if it's a delete (which might not have user_id in new_record)
+          // For safety, just re-fetch whenever any booking changes. It's inexpensive enough.
           console.log('📬 Booking update received:', payload)
           fetchBookings()
         }
@@ -62,6 +64,12 @@ export const BookingHistoryScreen: React.FC = () => {
     return () => {
       channel.unsubscribe()
     }
+  }, [user?.id])
+
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true)
+    await fetchBookings()
+    setRefreshing(false)
   }, [user?.id])
 
   const fetchBookings = async () => {
@@ -364,6 +372,14 @@ export const BookingHistoryScreen: React.FC = () => {
           renderItem={renderBooking}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={['#F59E0B']}
+              tintColor="#F59E0B"
+            />
+          }
         />
       )}
 

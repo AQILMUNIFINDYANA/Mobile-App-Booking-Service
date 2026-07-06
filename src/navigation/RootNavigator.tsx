@@ -320,12 +320,12 @@ const CustomSplashScreen = ({ onAnimationComplete }: { onAnimationComplete: () =
       <Animated.View style={{ opacity: textOpacity, transform: [{ translateY: textTranslateY }] }}>
         <Text style={{
           fontSize: 26,
-          fontWeight: '900',
+          fontWeight: '800',
           color: '#ffffff',
-          letterSpacing: 1.5,
-          textShadowColor: 'rgba(245, 158, 11, 0.3)',
+          letterSpacing: 0.8,
+          textShadowColor: 'rgba(0, 0, 0, 0.3)',
           textShadowOffset: { width: 0, height: 2 },
-          textShadowRadius: 8
+          textShadowRadius: 4
         }}>
           SMART BOOKING SYSTEM
         </Text>

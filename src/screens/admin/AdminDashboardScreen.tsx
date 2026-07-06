@@ -9,12 +9,25 @@ import {
   TouchableOpacity,
   Modal,
   ActivityIndicator,
+  RefreshControl,
+  Vibration,
+  Platform,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Menu, TextInput } from 'react-native-paper'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
+import * as Notifications from 'expo-notifications'
 import { useAuth } from '../../context/AuthContext'
 import { supabase } from '../../services/supabaseClient'
+
+// Force notification to show in foreground
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
 
 interface AdminBooking {
   id: string
@@ -65,6 +78,42 @@ export const AdminDashboardScreen: React.FC = () => {
 
   useEffect(() => {
     fetchDashboardData()
+
+    // Subscribe to realtime updates for bookings
+    const bookingsSubscription = supabase
+      .channel('admin-bookings-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'bookings',
+        },
+        (payload) => {
+          console.log('Realtime update received for bookings in AdminDashboard', payload.eventType)
+          fetchDashboardData()
+          
+          if (payload.eventType === 'INSERT') {
+            Vibration.vibrate([0, 500, 200, 500])
+            
+            // Trigger system tray notification
+            Notifications.scheduleNotificationAsync({
+              content: {
+                title: '🔔 Pesanan Masuk Baru!',
+                body: 'Ada pelanggan yang baru saja membuat pesanan!',
+                sound: true,
+                priority: Notifications.AndroidNotificationPriority.HIGH,
+              },
+              trigger: null,
+            }).catch(console.error);
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(bookingsSubscription)
+    }
   }, [])
 
   const fetchDashboardData = async () => {
@@ -194,9 +243,59 @@ export const AdminDashboardScreen: React.FC = () => {
       )
       setMenuVisible({ ...menuVisible, [bookingId]: false })
       Alert.alert('Success', `Status updated to ${newStatus}`)
-    } catch (error) {
+
+      // Notify User
+      try {
+        const { data: userTokens } = await supabase
+          .from('users')
+          .select('push_token')
+          .eq('id', currentBooking.user_id)
+          .single()
+          
+        if (userTokens?.push_token) {
+          Notifications.scheduleNotificationAsync({
+            content: {
+              title: 'Update Status Pesanan 🔔',
+              body: `Pesanan servis kendaraan Anda sekarang berstatus: ${newStatus}`,
+              sound: true,
+            },
+            trigger: null,
+          }).catch(console.error);
+        }
+      } catch (notifyError) {
+        console.log('Error sending notification:', notifyError)
+      }
+    } catch (error: any) {
       console.log('Error updating booking status:', error)
-      Alert.alert('Error', 'Failed to update status')
+      Alert.alert('Error', `Failed to update status: ${error.message || JSON.stringify(error)}`)
+    }
+  }
+
+  const confirmDeleteBooking = (bookingId: string) => {
+    Alert.alert(
+      'Delete Booking',
+      'Are you sure you want to delete this booking? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => deleteBooking(bookingId) }
+      ]
+    )
+  }
+
+  const deleteBooking = async (bookingId: string) => {
+    try {
+      const { error } = await supabase
+        .from('bookings')
+        .delete()
+        .eq('id', bookingId)
+
+      if (error) throw error
+
+      setBookings((prev) => prev.filter((b) => b.id !== bookingId))
+      Alert.alert('Success', 'Booking deleted successfully')
+    } catch (error: any) {
+      console.log('Error deleting booking:', error)
+      Alert.alert('Error', `Failed to delete booking: ${error.message || JSON.stringify(error)}`)
     }
   }
 
@@ -385,35 +484,45 @@ export const AdminDashboardScreen: React.FC = () => {
           </View>
         </View>
 
-        {/* Bottom Row: Status Button */}
-        {item.status !== 'Completed' && item.status !== 'Cancelled' ? (
-          <Menu
-            visible={menuVisible[item.id] || false}
-            onDismiss={() => setMenuVisible({ ...menuVisible, [item.id]: false })}
-            contentStyle={{ backgroundColor: '#1A1D24', borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)' }}
-            anchor={
-              <TouchableOpacity
-                style={styles.statusChangeBtn}
-                onPress={() => setMenuVisible({ ...menuVisible, [item.id]: true })}
+        {/* Bottom Row: Status Button and Delete */}
+        <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
+          <View style={{ flex: 1 }}>
+            {item.status !== 'Completed' && item.status !== 'Cancelled' ? (
+              <Menu
+                visible={menuVisible[item.id] || false}
+                onDismiss={() => setMenuVisible({ ...menuVisible, [item.id]: false })}
+                contentStyle={{ backgroundColor: '#1A1D24', borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)' }}
+                anchor={
+                  <TouchableOpacity
+                    style={styles.statusChangeBtn}
+                    onPress={() => setMenuVisible({ ...menuVisible, [item.id]: true })}
+                  >
+                    <Text style={styles.statusChangeBtnText}>Change Status</Text>
+                  </TouchableOpacity>
+                }
               >
-                <Text style={styles.statusChangeBtnText}>Change Status</Text>
-              </TouchableOpacity>
-            }
-          >
-            {statuses.map((status) => (
-              <Menu.Item
-                key={status}
-                onPress={() => updateStatus(item.id, status)}
-                title={status}
-                titleStyle={{ color: getStatusColor(status), fontWeight: '600' }}
-              />
-            ))}
-          </Menu>
-        ) : (
-          <View style={[styles.statusChangeBtn, { opacity: 0.5 }]}>
-            <Text style={[styles.statusChangeBtnText, { color: '#999' }]}>Status Locked</Text>
+                {statuses.map((status) => (
+                  <Menu.Item
+                    key={status}
+                    onPress={() => updateStatus(item.id, status)}
+                    title={status}
+                    titleStyle={{ color: getStatusColor(status), fontWeight: '600' }}
+                  />
+                ))}
+              </Menu>
+            ) : (
+              <View style={[styles.statusChangeBtn, { opacity: 0.5 }]}>
+                <Text style={[styles.statusChangeBtnText, { color: '#999' }]}>Status Locked</Text>
+              </View>
+            )}
           </View>
-        )}
+          <TouchableOpacity 
+            style={[styles.statusChangeBtn, { flex: 0, paddingHorizontal: 16, backgroundColor: 'rgba(244, 67, 54, 0.1)' }]} 
+            onPress={() => confirmDeleteBooking(item.id)}
+          >
+            <MaterialCommunityIcons name="trash-can-outline" size={20} color="#F44336" />
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   )
@@ -530,12 +639,18 @@ export const AdminDashboardScreen: React.FC = () => {
       </View>
 
       {/* Content */}
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#F59E0B" />
-        </View>
-      ) : (
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={fetchDashboardData}
+            tintColor="#F59E0B"
+            colors={['#F59E0B']}
+          />
+        }
+      >
         {activeTab === 'overview' && (
           <View style={styles.section}>
             {/* Welcome Card */}
@@ -757,7 +872,6 @@ export const AdminDashboardScreen: React.FC = () => {
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
-      )}
 
       {/* Service Modal */}
       <Modal visible={showServiceModal} animationType="slide" transparent>

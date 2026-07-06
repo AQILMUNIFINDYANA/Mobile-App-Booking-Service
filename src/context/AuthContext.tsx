@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { supabase } from '../services/supabaseClient'
 import { User, UserRole } from '../types'
+import { registerForPushNotificationsAsync, savePushToken } from '../utils/notifications'
 
 interface AuthContextType {
   user: User | null
@@ -25,6 +26,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     bootstrapAsync()
   }, [])
+
+  useEffect(() => {
+    if (user) {
+      registerForPushNotificationsAsync().then(token => {
+        if (token) {
+          savePushToken(user.id, token)
+        }
+      })
+    }
+  }, [user])
 
   const bootstrapAsync = async () => {
     try {

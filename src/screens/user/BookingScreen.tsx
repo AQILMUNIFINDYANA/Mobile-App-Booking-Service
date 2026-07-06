@@ -31,6 +31,7 @@ export const BookingScreen: React.FC<{ route?: any; navigation: any }> = ({ rout
 
   const [services, setServices] = useState<Service[]>([])
   const [serviceMenuVisible, setServiceMenuVisible] = useState(false)
+  const [vehicleMenuVisible, setVehicleMenuVisible] = useState(false)
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [showTimePicker, setShowTimePicker] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -117,13 +118,32 @@ export const BookingScreen: React.FC<{ route?: any; navigation: any }> = ({ rout
 
       if (error) throw error
 
+      // Notify admins
+      try {
+        const { data: admins } = await supabase.from('users').select('push_token').eq('role', 'admin')
+        if (admins) {
+          const { sendPushNotification } = await import('../../utils/notifications')
+          admins.forEach(admin => {
+            if (admin.push_token) {
+              sendPushNotification(
+                admin.push_token,
+                'Pesanan Masuk Baru! 🔔',
+                `${user.name} baru saja membuat pesanan ${selectedService?.title || 'Servis'}.`
+              )
+            }
+          })
+        }
+      } catch (pushErr) {
+        console.log('Failed to send push:', pushErr)
+      }
+
       showNotification(SensitiveActionMessages.booking.success, 'success', 3000)
       setFormData({
         service: '',
         serviceId: '',
         date: new Date().toISOString().split('T')[0],
         time: '09:00',
-        vehicleType: '',
+        vehicleType: 'Motorcycle',
         vehicleBrand: '',
         vehiclePlate: '',
         notes: '',
