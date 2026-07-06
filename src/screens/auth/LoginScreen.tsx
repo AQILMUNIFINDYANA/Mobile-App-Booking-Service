@@ -60,13 +60,13 @@ export const LoginScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
           <View style={styles.logoContainer}>
             <Ionicons name="flash" size={44} color="#F59E0B" />
           </View>
-          <Text style={styles.brandName}>AMI GARAGE REPAIR</Text>
-          <Text style={styles.brandSub}>online booking service</Text>
+          <Text style={styles.brandName}>AMI mobile</Text>
+          <Text style={styles.brandSub}>Welcome Back, Rider!</Text>
         </View>
 
         {/* Form Section */}
         <View style={styles.formContainer}>
-          <Text style={styles.welcomeText}>Welcome</Text>
+          <Text style={styles.welcomeText}>Sign In</Text>
 
           <View style={styles.formWrapper}>
             <AuthForm

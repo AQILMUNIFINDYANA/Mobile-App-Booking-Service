@@ -327,7 +327,7 @@ const CustomSplashScreen = ({ onAnimationComplete }: { onAnimationComplete: () =
           textShadowOffset: { width: 0, height: 2 },
           textShadowRadius: 8
         }}>
-          AMI GARAGE REPAIR
+          SMART BOOKING SYSTEM
         </Text>
       </Animated.View>
     </View>

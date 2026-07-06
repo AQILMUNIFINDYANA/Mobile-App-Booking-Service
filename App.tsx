@@ -1,10 +1,19 @@
 import React, { useEffect } from 'react'
 import { Platform } from 'react-native'
-import { PaperProvider } from 'react-native-paper'
+import { PaperProvider, MD3DarkTheme } from 'react-native-paper'
 import { AuthProvider } from './src/context/AuthContext'
 import { NotificationProvider } from './src/context/NotificationContext'
 import { RootNavigator } from './src/navigation/RootNavigator'
 import { NotificationOverlay } from './src/components/NotificationOverlay'
+import { StatusBar } from 'expo-status-bar'
+
+const theme = {
+  ...MD3DarkTheme,
+  colors: {
+    ...MD3DarkTheme.colors,
+    primary: '#F59E0B', // Amber
+  },
+}
 
 export default function App() {
   useEffect(() => {
@@ -25,7 +34,8 @@ export default function App() {
   }, [])
 
   return (
-    <PaperProvider>
+    <PaperProvider theme={theme}>
+      <StatusBar style="light" />
       <NotificationProvider>
         <AuthProvider>
           <RootNavigator />

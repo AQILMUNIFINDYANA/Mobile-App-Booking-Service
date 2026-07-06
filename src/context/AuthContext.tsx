@@ -28,7 +28,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const bootstrapAsync = async () => {
     try {
-      const { data } = await supabase.auth.getSession()
+      const { data, error } = await supabase.auth.getSession()
+      
+      if (error) {
+        throw error
+      }
+
       if (data.session?.user) {
         const { data: userData } = await supabase
           .from('users')
@@ -41,8 +46,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setRole(userData.role)
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.log('Bootstrap error:', error)
+      // Jika terjadi error pada token (invalid refresh token), paksa logout untuk membersihkan cache
+      if (error.message?.includes('Refresh Token') || error.name?.includes('Auth')) {
+        await supabase.auth.signOut()
+      }
     } finally {
       setIsLoading(false)
     }

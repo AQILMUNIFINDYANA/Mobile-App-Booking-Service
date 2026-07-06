@@ -313,9 +313,7 @@ export const ProfileScreen: React.FC = () => {
                       value={formData.address}
                       onChangeText={(v) => setFormData({ ...formData, address: v })}
                       placeholder="Enter your address"
-                      multiline
-                      numberOfLines={2}
-                      style={[styles.editInput, styles.addressEditInput]}
+                      style={styles.editInput}
                       mode="outlined"
                       outlineColor="#3a3a3a"
                       activeOutlineColor="#F59E0B"
@@ -764,9 +762,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#0F1115',
     borderRadius: 8,
     marginTop: 4,
-  },
-  addressEditInput: {
-    minHeight: 70,
   },
   // Menu Card
   menuCard: {
