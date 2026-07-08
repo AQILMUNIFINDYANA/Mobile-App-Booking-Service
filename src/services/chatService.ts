@@ -1,5 +1,24 @@
 import { supabase } from './supabaseClient'
 import { ChatMessage } from '../types'
+import { sendPushNotification } from '../utils/notifications'
+
+async function notifyReceiver(senderId: string, receiverId: string, messageText: string) {
+  try {
+    const { data: sender } = await supabase.from('users').select('name, role').eq('id', senderId).single();
+    const { data: receiver } = await supabase.from('users').select('push_token').eq('id', receiverId).single();
+    
+    if (sender && receiver && receiver.push_token) {
+      const senderPrefix = sender.role === 'admin' ? 'Admin ' : '';
+      sendPushNotification(
+        receiver.push_token,
+        `Pesan Baru dari ${senderPrefix}${sender.name}`,
+        messageText
+      );
+    }
+  } catch (error) {
+    console.error('Error sending push notification for chat:', error);
+  }
+}
 
 export const chatService = {
   async getConversation(userId: string, adminId: string) {
@@ -28,7 +47,7 @@ export const chatService = {
           sender_id: senderId,
           receiver_id: receiverId,
           message,
-          location_data: locationData || null,
+          ...(locationData ? { location_data: locationData } : {}),
           read: false,
         },
       ])
@@ -36,6 +55,10 @@ export const chatService = {
       .single()
 
     if (error) throw error
+    
+    // Kirim notifikasi secara background (jangan ditunggu agar tidak memperlambat chat)
+    notifyReceiver(senderId, receiverId, message);
+    
     return data as ChatMessage
   },
 
@@ -52,7 +75,7 @@ export const chatService = {
           sender_id: senderId,
           receiver_id: receiverId,
           message,
-          reply_to_id: replyToId,
+          ...(replyToId ? { reply_to_id: replyToId } : {}),
           read: false,
         },
       ])
@@ -60,6 +83,9 @@ export const chatService = {
       .single()
 
     if (error) throw error
+
+    notifyReceiver(senderId, receiverId, message);
+
     return data as ChatMessage
   },
 
@@ -84,6 +110,9 @@ export const chatService = {
       .single()
 
     if (error) throw error
+
+    notifyReceiver(senderId, receiverId, '📍 Lokasi dibagikan');
+
     return data as ChatMessage
   },
 

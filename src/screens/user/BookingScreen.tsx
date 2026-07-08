@@ -127,7 +127,7 @@ export const BookingScreen: React.FC<{ route?: any; navigation: any }> = ({ rout
             if (admin.push_token) {
               sendPushNotification(
                 admin.push_token,
-                'Pesanan Masuk Baru! 🔔',
+                'Pesanan Masuk Baru!',
                 `${user.name} baru saja membuat pesanan ${selectedService?.title || 'Servis'}.`
               )
             }

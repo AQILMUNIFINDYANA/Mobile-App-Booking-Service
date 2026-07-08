@@ -225,7 +225,7 @@ export const BookingHistoryScreen: React.FC = () => {
       case 'Cancelled':
         return '#F44336'
       default:
-        return '#999'
+        return '#999999'
     }
   }
 
@@ -264,13 +264,18 @@ export const BookingHistoryScreen: React.FC = () => {
   //   }
   // }
 
-  const renderBooking = ({ item }: { item: Booking }) => (
+  const renderBooking = ({ item }: { item: Booking }) => {
+    const serviceData = Array.isArray(item.services) ? item.services[0] : item.services;
+    const serviceTitle = serviceData?.title || 'Service';
+    const servicePrice = serviceData?.price || 0;
+
+    return (
     <View style={styles.bookingCard}>
       <View style={styles.cardContent}>
         {/* Header with Service and Status */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <Text style={styles.serviceName}>{item.services?.title || 'Service'}</Text>
+            <Text style={styles.serviceName}>{serviceTitle}</Text>
           </View>
           <View
             style={[
@@ -314,7 +319,7 @@ export const BookingHistoryScreen: React.FC = () => {
           <View>
             <Text style={styles.priceLabel}>Total Harga</Text>
             <Text style={styles.price}>
-              Rp {(item.services?.price || 0).toLocaleString('id-ID')}
+              Rp {servicePrice.toLocaleString('id-ID')}
             </Text>
           </View>
           <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -345,7 +350,7 @@ export const BookingHistoryScreen: React.FC = () => {
         </View>
       </View>
     </View>
-  )
+  )}
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>

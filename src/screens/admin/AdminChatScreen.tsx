@@ -9,12 +9,15 @@ import {
   Platform,
   ActivityIndicator,
   TextInput,
+  DeviceEventEmitter,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { IconButton } from 'react-native-paper'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { supabase } from '../../services/supabaseClient'
 import { useAuth } from '../../context/AuthContext'
+import { chatService } from '../../services/chatService'
+import { TypingIndicator } from '../../components/TypingIndicator'
 
 interface ChatUser {
   id: string
@@ -44,68 +47,86 @@ export const AdminChatScreen: React.FC<{ navigation: any }> = ({ navigation: _na
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [sending, setSending] = useState(false)
+  const [chatLoading, setChatLoading] = useState(false)
+  const [isOtherTyping, setIsOtherTyping] = useState(false)
   const [readUsers, setReadUsers] = useState<Set<string>>(new Set())
   const flatListRef = useRef<FlatList>(null)
+  const channelRef = useRef<any>(null)
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     loadChatUsers()
     
-    // Subscribe to new messages from users
-    const channel = supabase
-      .channel('admin_chat_updates')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'chat_messages',
-          filter: `receiver_id.eq.${user?.id}`
-        },
-        (payload: any) => {
-          if (payload.new) {
-            // Add message if user is selected
-            if (selectedUser?.id === payload.new.sender_id) {
-              setMessages(prev => {
-                const exists = prev.some(m => m.id === payload.new.id)
-                return exists ? prev : [...prev, {
-                  id: payload.new.id,
-                  senderId: payload.new.sender_id,
-                  receiverId: payload.new.receiver_id,
-                  text: payload.new.message,
-                  timestamp: new Date(payload.new.created_at + (payload.new.created_at.endsWith('Z') ? '' : 'Z')),
-                  read: payload.new.read,
-                }]
-              })
-              flatListRef.current?.scrollToEnd({ animated: true })
-            }
+    // Listen to local broadcast from AuthContext
+    const subscription = DeviceEventEmitter.addListener('onNewChatMessage', (payloadNew: any) => {
+      if (payloadNew && payloadNew.receiver_id === user?.id) {
+        // Add message if user is selected
+        if (selectedUser?.id === payloadNew.sender_id) {
+          setMessages(prev => {
+            const exists = prev.some(m => m.id === payloadNew.id)
+            if (exists) return prev;
             
-            // Update chat users list
-            setChatUsers(prev => {
-              const userExists = prev.find(u => u.id === payload.new.sender_id)
-              if (userExists) {
-                return prev.map(u => 
-                  u.id === payload.new.sender_id 
-                    ? {
-                        ...u,
-                        lastMessage: payload.new.message,
-                        lastMessageTime: new Date(payload.new.created_at + (payload.new.created_at.endsWith('Z') ? '' : 'Z')),
-                        unreadCount: view === 'chat' && selectedUser?.id === u.id ? 0 : u.unreadCount + 1,
-                      }
-                    : u
-                )
-              }
-              return prev
-            })
-          }
+            return [...prev, {
+              id: payloadNew.id,
+              senderId: payloadNew.sender_id,
+              receiverId: payloadNew.receiver_id,
+              text: payloadNew.message,
+              timestamp: new Date(payloadNew.created_at + (payloadNew.created_at.endsWith('Z') ? '' : 'Z')),
+              read: payloadNew.read,
+            }]
+          })
         }
-      )
-      .subscribe()
+        
+        // Update chat users list
+        setChatUsers(prev => {
+          const userExists = prev.find(u => u.id === payloadNew.sender_id)
+          if (userExists) {
+            return prev.map(u => 
+              u.id === payloadNew.sender_id 
+                ? {
+                    ...u,
+                    lastMessage: payloadNew.message,
+                    lastMessageTime: new Date(payloadNew.created_at + (payloadNew.created_at.endsWith('Z') ? '' : 'Z')),
+                    unreadCount: view === 'chat' && selectedUser?.id === u.id ? 0 : u.unreadCount + 1,
+                  }
+                : u
+            )
+          }
+          return prev
+        })
+      }
+    })
 
     return () => {
-      channel.unsubscribe()
+      subscription.remove()
+      if (channelRef.current) supabase.removeChannel(channelRef.current)
     }
-  }, [selectedUser?.id])
+  }, [selectedUser?.id, user?.id])
+
+  // Setup typing indicator channel for the selected user
+  useEffect(() => {
+    if (!selectedUser?.id) return;
+    
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current)
+    }
+    
+    const channel = supabase.channel(`chat_typing_${selectedUser.id}`)
+    
+    channel.on('broadcast', { event: 'typing' }, (payload) => {
+      if (payload.payload.sender_id !== user?.id) {
+        setIsOtherTyping(payload.payload.is_typing)
+      }
+    }).subscribe()
+    
+    channelRef.current = channel
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [selectedUser?.id, user?.id])
 
   const loadChatUsers = async () => {
     try {
@@ -163,6 +184,16 @@ export const AdminChatScreen: React.FC<{ navigation: any }> = ({ navigation: _na
     }
   }
 
+  const onRefresh = async () => {
+    setRefreshing(true)
+    if (view === 'list') {
+      await loadChatUsers()
+    } else if (selectedUser) {
+      await loadMessages(selectedUser.id)
+    }
+    setRefreshing(false)
+  }
+
   const loadMessages = async (userId: string) => {
     try {
       const { data, error } = await supabase
@@ -206,51 +237,78 @@ export const AdminChatScreen: React.FC<{ navigation: any }> = ({ navigation: _na
   const handleOpenChat = async (user: ChatUser) => {
     setSelectedUser(user)
     setReadUsers(prev => new Set(prev).add(user.id))
+    setMessages([])
+    setChatLoading(true)
+    setView('chat')
+    
     await loadMessages(user.id)
+    
+    setChatLoading(false)
     setChatUsers(prev =>
       prev.map(u => (u.id === user.id ? { ...u, unreadCount: 0 } : u))
     )
-    setView('chat')
+  }
+
+  const handleTyping = (text: string) => {
+    setNewMessage(text)
+    
+    if (channelRef.current && user) {
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'typing',
+        payload: { sender_id: user.id, is_typing: true }
+      })
+      
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
+      
+      typingTimeoutRef.current = setTimeout(() => {
+        if (channelRef.current) {
+          channelRef.current.send({
+            type: 'broadcast',
+            event: 'typing',
+            payload: { sender_id: user.id, is_typing: false }
+          })
+        }
+      }, 2000)
+    }
   }
 
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedUser || !user) return
 
+    const messageText = newMessage.trim()
+    setNewMessage('')
+    
+    // Optimistic Update: Tampilkan pesan seketika
+    const tempId = 'temp-' + Date.now()
+    const optimisticMsg: Message = {
+      id: tempId,
+      senderId: user.id,
+      receiverId: selectedUser.id,
+      text: messageText,
+      timestamp: new Date(),
+      read: false,
+    }
+    
+    setMessages(prev => [...prev, optimisticMsg])
+
     try {
       setSending(true)
-      
-      const { data, error } = await supabase
-        .from('chat_messages')
-        .insert({
-          sender_id: user.id,
-          receiver_id: selectedUser.id,
-          message: newMessage,
-          read: false,
-        })
-        .select()
-        .single()
+      const data = await chatService.sendMessage(user.id, selectedUser.id, messageText)
 
-      if (error) throw error
-
-      const newMsg: Message = {
+      // Replace the temp message with real data from server
+      setMessages(prev => prev.map(m => m.id === tempId ? {
+        ...m,
         id: data.id,
-        senderId: data.sender_id,
-        receiverId: data.receiver_id,
-        text: data.message,
         timestamp: new Date(data.created_at + (data.created_at.endsWith('Z') ? '' : 'Z')),
-        read: data.read,
-      }
-      
-      setMessages(prev => [...prev, newMsg])
-
-      setNewMessage('')
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true })
-      }, 100)
+      } : m))
 
       // Reload chat users to update last message
       await loadChatUsers()
     } catch (error) {
+      // Revert if error
+      setMessages(prev => prev.filter(m => m.id !== tempId))
+      setNewMessage(messageText)
       console.log('Error sending message:', error)
     } finally {
       setSending(false)
@@ -283,7 +341,7 @@ export const AdminChatScreen: React.FC<{ navigation: any }> = ({ navigation: _na
 
   const renderChatUser = ({ item }: { item: ChatUser }) => (
     <TouchableOpacity
-      style={[styles.chatUserItem, selectedUser?.id === item.id && styles.chatUserItemActive]}
+      style={styles.chatUserItem}
       onPress={() => handleOpenChat(item)}
     >
       <View style={styles.avatarContainer}>
@@ -380,7 +438,10 @@ export const AdminChatScreen: React.FC<{ navigation: any }> = ({ navigation: _na
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => setView('list')}
+          onPress={() => {
+            setView('list');
+            setSelectedUser(null);
+          }}
           style={styles.backButton}
         >
           <MaterialCommunityIcons name="chevron-left" size={28} color="#F59E0B" />
@@ -394,15 +455,22 @@ export const AdminChatScreen: React.FC<{ navigation: any }> = ({ navigation: _na
       {/* Messages */}
       <FlatList
         ref={flatListRef}
-        data={messages}
+        data={[...messages].reverse()}
         renderItem={renderMessage}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.messagesList}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+        contentContainerStyle={[styles.messagesList, messages.length === 0 && { flex: 1, justifyContent: 'center' }]}
+        inverted={true}
         ListEmptyComponent={
           <View style={styles.emptyMessages}>
-            <Text style={styles.emptyText}>No messages yet</Text>
+            {chatLoading ? (
+              <ActivityIndicator size="large" color="#F59E0B" />
+            ) : (
+              <Text style={styles.emptyText}>Belum ada pesan</Text>
+            )}
           </View>
+        }
+        ListHeaderComponent={
+          isOtherTyping ? <TypingIndicator /> : null
         }
       />
 
@@ -423,7 +491,7 @@ export const AdminChatScreen: React.FC<{ navigation: any }> = ({ navigation: _na
               placeholder="Type your reply..."
               placeholderTextColor="#666666"
               value={newMessage}
-              onChangeText={setNewMessage}
+              onChangeText={handleTyping}
               editable={!sending}
               multiline
               maxLength={500}
@@ -517,9 +585,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.05)',
     gap: 12,
-  },
-  chatUserItemActive: {
-    backgroundColor: 'rgba(245, 158, 11, 0.1)',
   },
   avatarContainer: {
     position: 'relative',

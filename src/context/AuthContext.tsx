@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react'
 import { supabase } from '../services/supabaseClient'
 import { User, UserRole } from '../types'
 import { registerForPushNotificationsAsync, savePushToken } from '../utils/notifications'
+import * as Notifications from 'expo-notifications'
+import { DeviceEventEmitter } from 'react-native'
 
 interface AuthContextType {
   user: User | null
@@ -28,12 +30,61 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [])
 
   useEffect(() => {
+    let chatSubscription: any = null;
+
     if (user) {
       registerForPushNotificationsAsync().then(token => {
         if (token) {
           savePushToken(user.id, token)
         }
       })
+
+      // Fallback: Realtime local notification to bypass Firebase FCM
+      chatSubscription = supabase
+        .channel(`chat-notifications-${user.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'chat_messages',
+            filter: `receiver_id=eq.${user.id}`,
+          },
+          async (payload) => {
+            try {
+              const { data: sender } = await supabase
+                .from('users')
+                .select('name, role')
+                .eq('id', payload.new.sender_id)
+                .single();
+                
+              // Broadcast locally to chat screens so they update instantly
+              DeviceEventEmitter.emit('onNewChatMessage', payload.new);
+              
+              if (sender) {
+                const senderPrefix = sender.role === 'admin' ? 'Admin ' : '';
+                Notifications.scheduleNotificationAsync({
+                  content: {
+                    title: `Pesan Baru dari ${senderPrefix}${sender.name}`,
+                    body: payload.new.message,
+                    sound: true,
+                    priority: Notifications.AndroidNotificationPriority.HIGH,
+                  },
+                  trigger: null,
+                }).catch(console.error);
+              }
+            } catch (err) {
+              console.error('Local chat notification error:', err);
+            }
+          }
+        )
+        .subscribe();
+    }
+
+    return () => {
+      if (chatSubscription) {
+        supabase.removeChannel(chatSubscription);
+      }
     }
   }, [user])
 

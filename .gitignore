@@ -44,3 +44,9 @@ web-build/
 .idea
 *.sublime-project
 *.sublime-workspace
+
+# Firebase & GCP Credentials
+google-services.json
+android/app/google-services.json
+firebase-service-account.json
+kunci-fcm.json

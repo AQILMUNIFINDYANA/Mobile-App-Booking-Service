@@ -15,6 +15,10 @@ Notifications.setNotificationHandler({
 export async function registerForPushNotificationsAsync() {
   let token;
 
+  if (Platform.OS === 'web') {
+    return null;
+  }
+
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
       name: 'default',
@@ -66,6 +70,11 @@ export async function savePushToken(userId: string, token: string) {
 }
 
 export async function sendPushNotification(expoPushToken: string, title: string, body: string, data = {}) {
+  if (Platform.OS === 'web') {
+    console.log('Push notifications are not sent from the web browser (CORS).');
+    return;
+  }
+
   const message = {
     to: expoPushToken,
     sound: 'default',

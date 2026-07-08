@@ -22,6 +22,7 @@
         "android.permission.ACCESS_FINE_LOCATION"
       ],
       "package": "com.aqilmunifindyana.esgulservicepro",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#191612"

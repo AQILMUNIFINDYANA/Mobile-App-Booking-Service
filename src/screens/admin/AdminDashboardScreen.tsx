@@ -19,6 +19,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons'
 import * as Notifications from 'expo-notifications'
 import { useAuth } from '../../context/AuthContext'
 import { supabase } from '../../services/supabaseClient'
+import { sendPushNotification } from '../../utils/notifications'
 
 // Force notification to show in foreground
 Notifications.setNotificationHandler({
@@ -37,6 +38,9 @@ interface AdminBooking {
   booking_date: string
   booking_time: string
   status: string
+  vehicle_brand?: string
+  vehicle_plate?: string
+  notes?: string
   services?: { title: string }
 }
 
@@ -99,7 +103,7 @@ export const AdminDashboardScreen: React.FC = () => {
             // Trigger system tray notification
             Notifications.scheduleNotificationAsync({
               content: {
-                title: '🔔 Pesanan Masuk Baru!',
+                title: 'Pesanan Masuk Baru!',
                 body: 'Ada pelanggan yang baru saja membuat pesanan!',
                 sound: true,
                 priority: Notifications.AndroidNotificationPriority.HIGH,
@@ -122,7 +126,7 @@ export const AdminDashboardScreen: React.FC = () => {
       const [bookingsData, servicesDataResult, reviewsData] = await Promise.all([
         supabase
           .from('bookings')
-          .select('id, user_id, service_id, booking_date, booking_time, status, users(name), services(title)'),
+          .select('id, user_id, service_id, booking_date, booking_time, status, vehicle_brand, vehicle_plate, notes, users(name), services(title)'),
         supabase
           .from('services')
           .select('id, title, description, price, estimated_duration'),
@@ -253,14 +257,11 @@ export const AdminDashboardScreen: React.FC = () => {
           .single()
           
         if (userTokens?.push_token) {
-          Notifications.scheduleNotificationAsync({
-            content: {
-              title: 'Update Status Pesanan 🔔',
-              body: `Pesanan servis kendaraan Anda sekarang berstatus: ${newStatus}`,
-              sound: true,
-            },
-            trigger: null,
-          }).catch(console.error);
+          sendPushNotification(
+            userTokens.push_token,
+            'Update Status Pesanan',
+            `Pesanan servis kendaraan Anda sekarang berstatus: ${newStatus}`
+          );
         }
       } catch (notifyError) {
         console.log('Error sending notification:', notifyError)
@@ -483,6 +484,34 @@ export const AdminDashboardScreen: React.FC = () => {
             <Text style={styles.detail}>{item.booking_time}</Text>
           </View>
         </View>
+
+        {/* Vehicle Details */}
+        {(item.vehicle_brand || item.vehicle_plate) && (
+          <View style={[styles.detailsRow, { marginTop: 8 }]}>
+            <View style={[styles.detailItem, { flex: 1 }]}>
+              <View style={{ backgroundColor: 'rgba(59, 130, 246, 0.15)', padding: 6, borderRadius: 8 }}>
+                <MaterialCommunityIcons name="motorbike" size={16} color="#3B82F6" />
+              </View>
+              <Text style={[styles.detail, { color: '#e0e0e0', fontWeight: '500', marginLeft: 4 }]}>
+                {item.vehicle_brand || 'Unknown'} <Text style={{ color: '#8a8a8a' }}>•</Text> {item.vehicle_plate || 'No Plate'}
+              </Text>
+            </View>
+          </View>
+        )}
+        
+        {/* Notes */}
+        {item.notes && (
+          <View style={[styles.detailsRow, { marginTop: 8 }]}>
+            <View style={[styles.detailItem, { flex: 1, alignItems: 'flex-start' }]}>
+              <View style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', padding: 6, borderRadius: 8 }}>
+                <MaterialCommunityIcons name="text-box-outline" size={16} color="#10B981" />
+              </View>
+              <Text style={[styles.detail, { color: '#d1d5db', lineHeight: 20, fontStyle: 'italic', marginLeft: 4, flex: 1, marginTop: 4 }]}>
+                "{item.notes}"
+              </Text>
+            </View>
+          </View>
+        )}
 
         {/* Bottom Row: Status Button and Delete */}
         <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
