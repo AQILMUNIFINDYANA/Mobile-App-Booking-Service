@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   View,
   StyleSheet,
@@ -12,6 +12,7 @@ import {
   RefreshControl,
   Vibration,
   Platform,
+  Animated,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Menu, TextInput } from 'react-native-paper'
@@ -20,6 +21,7 @@ import * as Notifications from 'expo-notifications'
 import { useAuth } from '../../context/AuthContext'
 import { supabase } from '../../services/supabaseClient'
 import { sendPushNotification } from '../../utils/notifications'
+import { useRoute, useNavigation } from '@react-navigation/native'
 
 // Force notification to show in foreground
 Notifications.setNotificationHandler({
@@ -41,7 +43,11 @@ interface AdminBooking {
   vehicle_brand?: string
   vehicle_plate?: string
   notes?: string
+  queue_number?: number
+  order_number?: string
+  vehicle_type?: string
   services?: { title: string }
+  created_at?: string
 }
 
 interface Service {
@@ -66,12 +72,16 @@ interface Review {
 type TabType = 'overview' | 'bookings' | 'services' | 'reviews'
 
 export const AdminDashboardScreen: React.FC = () => {
+  const route = useRoute<any>()
+  const navigation = useNavigation<any>()
   const { logout } = useAuth()
   const [activeTab, setActiveTab] = useState<TabType>('overview')
   const [menuVisible, setMenuVisible] = useState<{ [key: string]: boolean }>({})
   const [bookings, setBookings] = useState<AdminBooking[]>([])
   const [services, setServices] = useState<Service[]>([])
   const [reviews, setReviews] = useState<Review[]>([])
+  const [showDetailModal, setShowDetailModal] = useState(false)
+  const [selectedDetailBooking, setSelectedDetailBooking] = useState<AdminBooking | null>(null)
   const stats = {
     totalBookings: bookings.length,
     pendingBookings: bookings.filter((b) => b.status === 'Pending').length,
@@ -79,6 +89,75 @@ export const AdminDashboardScreen: React.FC = () => {
     totalServices: services.length,
   }
   const [loading, setLoading] = useState(true)
+  const [highlightedOrderNumber, setHighlightedOrderNumber] = useState<string | null>(null)
+  const [pendingScrollIndex, setPendingScrollIndex] = useState<number | null>(null)
+  const scrollViewRef = useRef<ScrollView>(null)
+  const pulseAnim = useRef(new Animated.Value(0)).current
+
+  useEffect(() => {
+    if (route.params?.orderNumberToOpen && bookings.length > 0) {
+      const searchOrder = route.params.orderNumberToOpen.toUpperCase();
+      const orderToOpen = bookings.find(b => b.order_number?.toUpperCase() === searchOrder)
+      if (orderToOpen) {
+        setActiveTab('bookings')
+        setHighlightedOrderNumber(orderToOpen.order_number)
+        
+        const index = bookings.findIndex(b => b.order_number?.toUpperCase() === searchOrder)
+        if (index !== -1) {
+          setPendingScrollIndex(index)
+        }
+
+        setSelectedDetailBooking(orderToOpen)
+        setShowDetailModal(true)
+        navigation.setParams({ orderNumberToOpen: undefined })
+      }
+    }
+  }, [route.params?.orderNumberToOpen, bookings])
+
+  const itemLayouts = useRef<{ [key: string]: number }>({})
+
+  useEffect(() => {
+    if (pendingScrollIndex !== null && activeTab === 'bookings') {
+      const timer = setTimeout(() => {
+        const orderNumber = bookings[pendingScrollIndex]?.order_number;
+        const itemY = (orderNumber && itemLayouts.current[orderNumber] !== undefined) 
+          ? itemLayouts.current[orderNumber] 
+          : pendingScrollIndex * 220;
+        
+        scrollViewRef.current?.scrollTo({ 
+          y: Math.max(0, itemY - 150), 
+          animated: true 
+        })
+        setPendingScrollIndex(null)
+      }, 800)
+      return () => clearTimeout(timer)
+    }
+  }, [pendingScrollIndex, activeTab, bookings])
+
+  useEffect(() => {
+    if (highlightedOrderNumber) {
+      pulseAnim.setValue(0);
+      const animation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1200,
+            useNativeDriver: false,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 0,
+            duration: 1200,
+            useNativeDriver: false,
+          })
+        ])
+      );
+      animation.start();
+
+      return () => {
+        animation.stop();
+      };
+    }
+  }, [highlightedOrderNumber]);
 
   useEffect(() => {
     fetchDashboardData()
@@ -126,7 +205,7 @@ export const AdminDashboardScreen: React.FC = () => {
       const [bookingsData, servicesDataResult, reviewsData] = await Promise.all([
         supabase
           .from('bookings')
-          .select('id, user_id, service_id, booking_date, booking_time, status, vehicle_brand, vehicle_plate, notes, users(name), services(title)'),
+          .select('id, user_id, service_id, booking_date, booking_time, status, vehicle_brand, vehicle_plate, notes, queue_number, order_number, vehicle_type, created_at, users(name), services(title, estimated_duration)'),
         supabase
           .from('services')
           .select('id, title, description, price, estimated_duration'),
@@ -233,16 +312,33 @@ export const AdminDashboardScreen: React.FC = () => {
         return
       }
 
+      let updatePayload: any = { status: newStatus }
+
+      if (newStatus === 'Confirmed' && !currentBooking.order_number) {
+        const { count: dailyCount, error: countError } = await supabase
+          .from('bookings')
+          .select('*', { count: 'exact', head: true })
+          .eq('booking_date', currentBooking.booking_date)
+          .not('order_number', 'is', null)
+
+        const queueNumber = (dailyCount || 0) + 1
+        const dateStr = currentBooking.booking_date.replace(/-/g, '')
+        const orderNumber = `ORD-${dateStr}-${queueNumber.toString().padStart(3, '0')}`
+
+        updatePayload.queue_number = queueNumber
+        updatePayload.order_number = orderNumber
+      }
+
       const { error } = await supabase
         .from('bookings')
-        .update({ status: newStatus })
+        .update(updatePayload)
         .eq('id', bookingId)
 
       if (error) throw error
 
       setBookings((prev) =>
         prev.map((b) =>
-          b.id === bookingId ? { ...b, status: newStatus } : b
+          b.id === bookingId ? { ...b, ...updatePayload } : b
         )
       )
       setMenuVisible({ ...menuVisible, [bookingId]: false })
@@ -257,10 +353,14 @@ export const AdminDashboardScreen: React.FC = () => {
           .single()
           
         if (userTokens?.push_token) {
+          const notificationBody = newStatus === 'Completed' 
+            ? 'Service kendaraan Anda sudah selesai dikerjakan. Silakan ambil kendaraan Anda.' 
+            : `Pesanan servis kendaraan Anda sekarang berstatus ${newStatus}`;
+
           sendPushNotification(
             userTokens.push_token,
             'Update Status Pesanan',
-            `Pesanan servis kendaraan Anda sekarang berstatus: ${newStatus}`
+            notificationBody
           );
         }
       } catch (notifyError) {
@@ -452,8 +552,38 @@ export const AdminDashboardScreen: React.FC = () => {
 
 
 
-  const renderBooking = ({ item }: { item: AdminBooking }) => (
-    <View style={styles.bookingCard}>
+  const renderBooking = ({ item }: { item: AdminBooking }) => {
+    const isHighlighted = highlightedOrderNumber && highlightedOrderNumber === item.order_number;
+    
+    return (
+    <View 
+      style={styles.bookingCard}
+      onLayout={(e) => {
+        itemLayouts.current[item.order_number] = e.nativeEvent.layout.y;
+      }}
+    >
+      {/* Absolute precise glow overlay */}
+      {isHighlighted && (
+        <Animated.View 
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFillObject,
+            {
+              top: -1, left: -1, right: -1, bottom: -1,
+              borderRadius: 20,
+              borderWidth: 2,
+              borderColor: pulseAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: ['rgba(245, 158, 11, 0.2)', 'rgba(245, 158, 11, 1)']
+              }),
+              backgroundColor: pulseAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: ['rgba(245, 158, 11, 0.02)', 'rgba(245, 158, 11, 0.12)']
+              })
+            }
+          ]}
+        />
+      )}
       <View style={styles.cardInner}>
         {/* Top Row: User + Status */}
         <View style={styles.topRow}>
@@ -485,14 +615,26 @@ export const AdminDashboardScreen: React.FC = () => {
           </View>
         </View>
 
+        {/* Dibuat Pada */}
+        {item.created_at && (
+          <View style={[styles.detailsRow, { marginTop: 8 }]}>
+            <View style={styles.detailItem}>
+              <MaterialCommunityIcons name="clock-check-outline" size={16} color="#8a8a8a" />
+              <Text style={[styles.detail, { color: '#8a8a8a', fontSize: 11 }]}>
+                Dipesan pada : {new Date(item.created_at).toLocaleString('id-ID', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </Text>
+            </View>
+          </View>
+        )}
+
         {/* Vehicle Details */}
         {(item.vehicle_brand || item.vehicle_plate) && (
-          <View style={[styles.detailsRow, { marginTop: 8 }]}>
+          <View style={[styles.detailsRow, { marginTop: 2, marginBottom: 0 }]}>
             <View style={[styles.detailItem, { flex: 1 }]}>
               <View style={{ backgroundColor: 'rgba(59, 130, 246, 0.15)', padding: 6, borderRadius: 8 }}>
                 <MaterialCommunityIcons name="motorbike" size={16} color="#3B82F6" />
               </View>
-              <Text style={[styles.detail, { color: '#e0e0e0', fontWeight: '500', marginLeft: 4 }]}>
+              <Text style={[styles.detail, { color: '#e0e0e0', fontWeight: '500', marginLeft: 6 }]}>
                 {item.vehicle_brand || 'Unknown'} <Text style={{ color: '#8a8a8a' }}>•</Text> {item.vehicle_plate || 'No Plate'}
               </Text>
             </View>
@@ -501,12 +643,12 @@ export const AdminDashboardScreen: React.FC = () => {
         
         {/* Notes */}
         {item.notes && (
-          <View style={[styles.detailsRow, { marginTop: 8 }]}>
+          <View style={[styles.detailsRow, { marginTop: 4, marginBottom: 0 }]}>
             <View style={[styles.detailItem, { flex: 1, alignItems: 'flex-start' }]}>
               <View style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', padding: 6, borderRadius: 8 }}>
                 <MaterialCommunityIcons name="text-box-outline" size={16} color="#10B981" />
               </View>
-              <Text style={[styles.detail, { color: '#d1d5db', lineHeight: 20, fontStyle: 'italic', marginLeft: 4, flex: 1, marginTop: 4 }]}>
+              <Text style={[styles.detail, { color: '#d1d5db', lineHeight: 20, fontStyle: 'italic', marginLeft: 6, flex: 1, paddingTop: 4 }]}>
                 "{item.notes}"
               </Text>
             </View>
@@ -514,19 +656,30 @@ export const AdminDashboardScreen: React.FC = () => {
         )}
 
         {/* Bottom Row: Status Button and Delete */}
-        <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
-          <View style={{ flex: 1 }}>
-            {item.status !== 'Completed' && item.status !== 'Cancelled' ? (
-              <Menu
+        <View style={{ flexDirection: 'row', gap: 10, marginTop: 16, height: 40 }}>
+          <View style={{ flex: 1, flexDirection: 'row', gap: 10 }}>
+            <TouchableOpacity
+              style={[styles.statusChangeBtn, { flex: 1, height: '100%', justifyContent: 'center', paddingVertical: 0, backgroundColor: 'transparent', borderColor: '#F59E0B', borderWidth: 1 }]}
+              onPress={() => {
+                setSelectedDetailBooking(item)
+                setShowDetailModal(true)
+              }}
+            >
+              <Text style={styles.statusChangeBtnText}>Detail</Text>
+            </TouchableOpacity>
+
+            <View style={{ flex: 1 }}>
+              {item.status !== 'Completed' && item.status !== 'Cancelled' ? (
+                <Menu
                 visible={menuVisible[item.id] || false}
                 onDismiss={() => setMenuVisible({ ...menuVisible, [item.id]: false })}
                 contentStyle={{ backgroundColor: '#1A1D24', borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.08)' }}
                 anchor={
                   <TouchableOpacity
-                    style={styles.statusChangeBtn}
+                    style={[styles.statusChangeBtn, { height: '100%', justifyContent: 'center', paddingVertical: 0 }]}
                     onPress={() => setMenuVisible({ ...menuVisible, [item.id]: true })}
                   >
-                    <Text style={styles.statusChangeBtnText}>Change Status</Text>
+                    <Text style={styles.statusChangeBtnText}>Status</Text>
                   </TouchableOpacity>
                 }
               >
@@ -539,14 +692,15 @@ export const AdminDashboardScreen: React.FC = () => {
                   />
                 ))}
               </Menu>
-            ) : (
-              <View style={[styles.statusChangeBtn, { opacity: 0.5 }]}>
-                <Text style={[styles.statusChangeBtnText, { color: '#999' }]}>Status Locked</Text>
-              </View>
-            )}
+              ) : (
+                <View style={[styles.statusChangeBtn, { height: '100%', justifyContent: 'center', paddingVertical: 0, opacity: 0.5 }]}>
+                  <Text style={[styles.statusChangeBtnText, { color: '#999' }]}>Locked</Text>
+                </View>
+              )}
+            </View>
           </View>
           <TouchableOpacity 
-            style={[styles.statusChangeBtn, { flex: 0, paddingHorizontal: 16, backgroundColor: 'rgba(244, 67, 54, 0.1)' }]} 
+            style={[styles.statusChangeBtn, { width: 40, height: '100%', paddingHorizontal: 0, paddingVertical: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(244, 67, 54, 0.1)' }]} 
             onPress={() => confirmDeleteBooking(item.id)}
           >
             <MaterialCommunityIcons name="trash-can-outline" size={20} color="#F44336" />
@@ -554,7 +708,8 @@ export const AdminDashboardScreen: React.FC = () => {
         </View>
       </View>
     </View>
-  )
+    )
+  }
 
   const renderService = ({ item }: { item: Service }) => (
     <View style={styles.serviceCard}>
@@ -669,8 +824,11 @@ export const AdminDashboardScreen: React.FC = () => {
 
       {/* Content */}
       <ScrollView 
-        style={styles.content} 
+        ref={scrollViewRef}
+        style={styles.content}
         showsVerticalScrollIndicator={false}
+        onScrollBeginDrag={() => setHighlightedOrderNumber(null)}
+        onTouchStart={() => setHighlightedOrderNumber(null)}
         refreshControl={
           <RefreshControl
             refreshing={loading}
@@ -810,26 +968,26 @@ export const AdminDashboardScreen: React.FC = () => {
 
             {/* Recent Bookings */}
             <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Latest Bookings</Text>
-            <FlatList
-              data={bookings.slice(0, 3)}
-              renderItem={renderBooking}
-              keyExtractor={(item) => item.id}
-              scrollEnabled={false}
-              contentContainerStyle={styles.listContainer}
-            />
+            <View style={styles.listContainer}>
+              {bookings.slice(0, 3).map((item) => (
+                <React.Fragment key={item.id}>
+                  {renderBooking({ item })}
+                </React.Fragment>
+              ))}
+            </View>
           </View>
         )}
 
         {activeTab === 'bookings' && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>All Bookings ({bookings.length})</Text>
-            <FlatList
-              data={bookings}
-              renderItem={renderBooking}
-              keyExtractor={(item) => item.id}
-              scrollEnabled={false}
-              contentContainerStyle={styles.listContainer}
-            />
+            <View style={styles.listContainer}>
+              {bookings.map((item) => (
+                <React.Fragment key={item.id}>
+                  {renderBooking({ item })}
+                </React.Fragment>
+              ))}
+            </View>
           </View>
         )}
 
@@ -859,13 +1017,13 @@ export const AdminDashboardScreen: React.FC = () => {
                 <Text style={styles.emptyText}>No services available</Text>
               </View>
             ) : (
-            <FlatList
-              data={services}
-              renderItem={renderService}
-              keyExtractor={(item) => item.id}
-              scrollEnabled={false}
-              contentContainerStyle={styles.listContainer}
-            />
+            <View style={styles.listContainer}>
+              {services.map((item) => (
+                <React.Fragment key={item.id}>
+                  {renderService({ item })}
+                </React.Fragment>
+              ))}
+            </View>
             )}
           </View>
         )}
@@ -888,13 +1046,13 @@ export const AdminDashboardScreen: React.FC = () => {
                 <Text style={styles.emptyText}>No reviews yet</Text>
               </View>
             ) : (
-            <FlatList
-              data={reviews}
-              renderItem={renderReview}
-              keyExtractor={(item) => item.id}
-              scrollEnabled={false}
-              contentContainerStyle={styles.listContainer}
-            />
+            <View style={styles.listContainer}>
+              {reviews.map((item) => (
+                <React.Fragment key={item.id}>
+                  {renderReview({ item })}
+                </React.Fragment>
+              ))}
+            </View>
             )}
           </View>
         )}
@@ -1046,6 +1204,74 @@ export const AdminDashboardScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Detail Modal */}
+      <Modal visible={showDetailModal} transparent={true} animationType="fade">
+        <View style={styles.centerModalOverlay}>
+          <View style={[styles.logoutModalContent, { width: '90%', maxWidth: 400 }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <Text style={styles.logoutModalTitle}>Detail Pesanan</Text>
+              <TouchableOpacity onPress={() => setShowDetailModal(false)}>
+                <MaterialCommunityIcons name="close" size={24} color="#F59E0B" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ maxHeight: 500 }} showsVerticalScrollIndicator={false}>
+              {selectedDetailBooking && (
+                <>
+                  <View style={{ borderColor: '#F59E0B', borderWidth: 1, backgroundColor: 'rgba(245, 158, 11, 0.05)', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+                    <Text style={{ fontSize: 12, color: '#8a8a8a', marginBottom: 4 }}>Nomor Pesanan</Text>
+                    <Text style={{ fontSize: 18, fontWeight: '700', color: '#ffffff', marginBottom: 12 }}>
+                      {selectedDetailBooking.order_number || 'Menunggu Konfirmasi'}
+                    </Text>
+                    <Text style={{ fontSize: 12, color: '#8a8a8a', marginBottom: 4 }}>Nomor Antrian</Text>
+                    <Text style={{ fontSize: 24, fontWeight: '700', color: '#F59E0B' }}>
+                      {selectedDetailBooking.queue_number ? `#${selectedDetailBooking.queue_number}` : '-'}
+                    </Text>
+                  </View>
+                  
+                  <View style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#ffffff', marginBottom: 8 }}>Pelanggan</Text>
+                    <Text style={{ color: '#e0e0e0', fontSize: 14 }}>{selectedDetailBooking.users?.name || 'Unknown'}</Text>
+                  </View>
+
+                  <View style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#ffffff', marginBottom: 8 }}>Informasi Layanan</Text>
+                    <Text style={{ color: '#e0e0e0', fontSize: 14 }}>{selectedDetailBooking.services?.title || 'Service'}</Text>
+                    {selectedDetailBooking.services?.estimated_duration && (
+                      <Text style={{ color: '#e0e0e0', fontSize: 14, marginTop: 4 }}>
+                        Estimasi : {selectedDetailBooking.services.estimated_duration} Menit
+                      </Text>
+                    )}
+                  </View>
+                  
+                  <View style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#ffffff', marginBottom: 8 }}>Waktu Booking</Text>
+                    <Text style={{ color: '#e0e0e0', fontSize: 14 }}>Tanggal : {selectedDetailBooking.booking_date}</Text>
+                    <Text style={{ color: '#e0e0e0', fontSize: 14 }}>Jam : {selectedDetailBooking.booking_time}</Text>
+                  </View>
+
+                  <View style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#ffffff', marginBottom: 8 }}>Kendaraan</Text>
+                    <Text style={{ color: '#e0e0e0', fontSize: 14 }}>Tipe : {selectedDetailBooking.vehicle_type || '-'}</Text>
+                    <Text style={{ color: '#e0e0e0', fontSize: 14 }}>Merek : {selectedDetailBooking.vehicle_brand || '-'}</Text>
+                    <Text style={{ color: '#e0e0e0', fontSize: 14 }}>Plat : {selectedDetailBooking.vehicle_plate || '-'}</Text>
+                  </View>
+
+                  {selectedDetailBooking.notes && (
+                    <View style={{ marginBottom: 16 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: '#ffffff', marginBottom: 8 }}>Catatan</Text>
+                      <View style={{ backgroundColor: 'rgba(255, 255, 255, 0.05)', padding: 12, borderRadius: 8 }}>
+                        <Text style={{ color: '#e0e0e0', fontSize: 14 }}>{selectedDetailBooking.notes}</Text>
+                      </View>
+                    </View>
+                  )}
+                  <View style={{ height: 16 }} />
+                </>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
       </View>
     </SafeAreaView>
   )
@@ -1151,7 +1377,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 12,
     elevation: 8,
-    overflow: 'hidden',
   },
   serviceCard: {
     backgroundColor: 'rgba(34, 37, 45, 0.65)',

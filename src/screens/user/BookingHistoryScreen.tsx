@@ -17,6 +17,11 @@ interface Booking {
   status: string
   notes?: string
   price?: number
+  queue_number?: number
+  order_number?: string
+  vehicle_type?: string
+  vehicle_brand?: string
+  vehicle_plate?: string
   services?: { title: string; price: number }
   reviews?: { id: string; rating: number; review_text: string }[]
 }
@@ -29,8 +34,10 @@ export const BookingHistoryScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false)
 
   const [showReviewModal, setShowReviewModal] = useState(false)
+  const [showDetailModal, setShowDetailModal] = useState(false)
   const [isViewOnly, setIsViewOnly] = useState(false)
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null)
+  const [selectedDetailBooking, setSelectedDetailBooking] = useState<Booking | null>(null)
   const [rating, setRating] = useState(5)
   const [review, setReview] = useState('')
   const [reviewCount, setReviewCount] = useState(0)
@@ -90,7 +97,13 @@ export const BookingHistoryScreen: React.FC = () => {
           booking_time,
           status,
           notes,
-          services(title, price),
+          queue_number,
+          order_number,
+          vehicle_type,
+          vehicle_brand,
+          vehicle_plate,
+          created_at,
+          services(title, price, estimated_duration),
           reviews(id, rating, review_text)
         `)
         .eq('user_id', user.id)
@@ -303,6 +316,18 @@ export const BookingHistoryScreen: React.FC = () => {
           </View>
         </View>
 
+        {/* Dibuat Pada */}
+        {item.created_at && (
+          <View style={[styles.infoSection, { marginTop: 0 }]}>
+            <View style={[styles.infoItem, { width: '100%' }]}>
+              <MaterialCommunityIcons name="clock-check-outline" size={14} color="#8a8a8a" />
+              <Text style={styles.infoLabel}>
+                Dipesan pada : {new Date(item.created_at).toLocaleString('id-ID', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </Text>
+            </View>
+          </View>
+        )}
+
         {/* Notes */}
         {item.notes && (
           <View style={styles.notesSection}>
@@ -315,19 +340,30 @@ export const BookingHistoryScreen: React.FC = () => {
         )}
 
         {/* Footer - Price and Rating */}
-        <View style={styles.footer}>
-          <View>
+        <View style={[styles.footer, { flexDirection: 'column', alignItems: 'stretch' }]}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <Text style={styles.priceLabel}>Total Harga</Text>
             <Text style={styles.price}>
               Rp {servicePrice.toLocaleString('id-ID')}
             </Text>
           </View>
           <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Button
+              mode="outlined"
+              labelStyle={[styles.reviewButtonLabel, { color: '#F59E0B' }]}
+              style={[styles.reviewButton, { flex: 1, backgroundColor: 'transparent', borderColor: '#F59E0B', borderWidth: 1 }]}
+              onPress={() => {
+                setSelectedDetailBooking(item)
+                setShowDetailModal(true)
+              }}
+            >
+              Detail
+            </Button>
             {(item.status === 'Confirmed' || item.status === 'In Progress') && (
               <Button
                 mode="contained"
                 labelStyle={styles.reviewButtonLabel}
-                style={[styles.reviewButton, { backgroundColor: '#4CAF50' }]}
+                style={[styles.reviewButton, { flex: 1, backgroundColor: '#4CAF50' }]}
                 onPress={() => navigation.navigate('Chat')}
               >
                 Chat Admin
@@ -339,6 +375,7 @@ export const BookingHistoryScreen: React.FC = () => {
                 labelStyle={styles.reviewButtonLabel}
                 style={[
                   styles.reviewButton,
+                  { flex: 1 },
                   item.reviews && item.reviews.length > 0 ? { backgroundColor: '#666666' } : {}
                 ]}
                 onPress={() => handleOpenReview(item)}
@@ -484,6 +521,106 @@ export const BookingHistoryScreen: React.FC = () => {
 
               <View style={{ height: 24 }} />
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Detail Modal */}
+      <Modal visible={showDetailModal} transparent={true} animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Detail Pesanan</Text>
+              <TouchableOpacity onPress={() => setShowDetailModal(false)}>
+                <MaterialCommunityIcons name="close" size={24} color="#F59E0B" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalBody}>
+              {selectedDetailBooking && (
+                <>
+                  <View style={[styles.bookingInfo, { borderColor: '#F59E0B', borderWidth: 1, backgroundColor: 'rgba(245, 158, 11, 0.05)' }]}>
+                    <Text style={{ fontSize: 12, color: '#8a8a8a', marginBottom: 4 }}>Nomor Pesanan</Text>
+                    <Text style={{ fontSize: 18, fontWeight: '700', color: '#ffffff', marginBottom: 12 }}>
+                      {selectedDetailBooking.order_number || 'Menunggu Konfirmasi'}
+                    </Text>
+                    <Text style={{ fontSize: 12, color: '#8a8a8a', marginBottom: 4 }}>Nomor Antrian</Text>
+                    <Text style={{ fontSize: 24, fontWeight: '700', color: '#F59E0B' }}>
+                      {selectedDetailBooking.queue_number ? `#${selectedDetailBooking.queue_number}` : '-'}
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.modalSection}>
+                    <Text style={styles.modalSectionTitle}>Informasi Layanan</Text>
+                    <View style={{ gap: 8, marginTop: 8 }}>
+                      <Text style={{ color: '#e0e0e0', fontSize: 14 }}>{selectedDetailBooking.services?.title || 'Service'}</Text>
+                      <Text style={{ color: '#F59E0B', fontSize: 16, fontWeight: '700' }}>
+                        Rp {(selectedDetailBooking.services?.price || 0).toLocaleString('id-ID')}
+                      </Text>
+                      {selectedDetailBooking.services?.estimated_duration && (
+                        <Text style={{ color: '#e0e0e0', fontSize: 14 }}>
+                          Estimasi : {selectedDetailBooking.services.estimated_duration} Menit
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+                  
+                  <View style={styles.modalSection}>
+                    <Text style={styles.modalSectionTitle}>Waktu Booking</Text>
+                    <View style={{ gap: 8, marginTop: 8 }}>
+                      <Text style={{ color: '#e0e0e0', fontSize: 14 }}>Tanggal : {selectedDetailBooking.booking_date}</Text>
+                      <Text style={{ color: '#e0e0e0', fontSize: 14 }}>Jam : {selectedDetailBooking.booking_time}</Text>
+                      <Text style={{ color: '#F59E0B', fontSize: 12, fontStyle: 'italic', marginTop: 4 }}>
+                        * Mohon datang 10 menit sebelum waktu booking agar tidak terlambat.
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={{ marginBottom: 16 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#ffffff', marginBottom: 8 }}>Kendaraan</Text>
+                    <Text style={{ color: '#e0e0e0', fontSize: 14 }}>Tipe : {selectedDetailBooking.vehicle_type || '-'}</Text>
+                    <Text style={{ color: '#e0e0e0', fontSize: 14 }}>Merek : {selectedDetailBooking.vehicle_brand || '-'}</Text>
+                    <Text style={{ color: '#e0e0e0', fontSize: 14 }}>Plat : {selectedDetailBooking.vehicle_plate || '-'}</Text>
+                  </View>
+
+                  {selectedDetailBooking.notes && (
+                    <View style={styles.modalSection}>
+                      <Text style={styles.modalSectionTitle}>Catatan</Text>
+                      <View style={{ backgroundColor: 'rgba(255, 255, 255, 0.05)', padding: 12, borderRadius: 8, marginTop: 8 }}>
+                        <Text style={{ color: '#e0e0e0', fontSize: 14 }}>{selectedDetailBooking.notes}</Text>
+                      </View>
+                    </View>
+                  )}
+                  
+                  <View style={{ height: 24 }} />
+                </>
+              )}
+            </ScrollView>
+            
+            {/* Action Button pinned at the bottom */}
+            {selectedDetailBooking && (
+              <View style={{ padding: 16, borderTopWidth: 1, borderTopColor: 'rgba(255, 255, 255, 0.05)' }}>
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    borderColor: '#3B82F6',
+                    borderWidth: 1,
+                    borderRadius: 12,
+                    padding: 14,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8
+                  }}
+                  onPress={() => {
+                    setShowDetailModal(false)
+                    navigation.navigate('Chat', { prefillMessage: `Tolong cek pesanan saya dengan No. Pesanan: ${selectedDetailBooking.order_number || '-'}` })
+                  }}
+                >
+                  <MaterialCommunityIcons name="chat-processing-outline" size={20} color="#3B82F6" />
+                  <Text style={{ color: '#3B82F6', fontSize: 14, fontWeight: '600' }}>Tanya Admin tentang Pesanan ini</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         </View>
       </Modal>

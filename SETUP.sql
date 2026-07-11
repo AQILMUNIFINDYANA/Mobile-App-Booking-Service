@@ -82,9 +82,18 @@ CREATE TABLE IF NOT EXISTS bookings (
   notes TEXT,
   status VARCHAR DEFAULT 'Pending' CHECK (status IN ('Pending', 'Confirmed', 'Completed', 'Cancelled')),
   total_price INTEGER,
+  queue_number INTEGER,
+  order_number VARCHAR,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
+
+-- ============================================================================
+-- PENTING: UPDATE UNTUK EXISTING DATABASE
+-- Jika database sudah pernah dibuat, jalankan 2 baris ini:
+-- ALTER TABLE bookings ADD COLUMN queue_number INTEGER;
+-- ALTER TABLE bookings ADD COLUMN order_number VARCHAR;
+-- ============================================================================
 
 COMMENT ON TABLE bookings IS 'Customer service bookings';
 COMMENT ON COLUMN bookings.status IS 'Booking status: Pending, Confirmed, Completed, Cancelled';

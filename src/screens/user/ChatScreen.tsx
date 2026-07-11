@@ -36,11 +36,11 @@ interface Message {
 // We will fetch the admin ID dynamically from the database
 // const ADMIN_USER_ID = 'admin-support-team'
 
-export const ChatScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
+export const ChatScreen: React.FC<{ navigation: any, route?: any }> = ({ navigation, route }) => {
   const { user } = useAuth()
   const { showNotification } = useNotification()
   const [messages, setMessages] = useState<Message[]>([])
-  const [newMessage, setNewMessage] = useState('')
+  const [newMessage, setNewMessage] = useState(route?.params?.prefillMessage || '')
   const [showInfo, setShowInfo] = useState(false)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)

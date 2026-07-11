@@ -57,6 +57,9 @@ export const ServiceCatalogScreen: React.FC<{ navigation: any }> = ({ navigation
         <View style={styles.headerCard}>
           <Text style={styles.title}>All Services</Text>
           <Text style={styles.subtitle}>Detailed catalog of what we offer</Text>
+          <Text style={{ color: '#F59E0B', fontSize: 13, fontStyle: 'italic', marginTop: 12 }}>
+            * Mohon datang 10 menit sebelum waktu booking agar tidak terlambat.
+          </Text>
         </View>
 
         {loading ? (

@@ -32,10 +32,13 @@ export interface Booking {
   vehicle_plate?: string
   notes?: string
   total_price?: number
+  queue_number?: number
+  order_number?: string
   created_at?: string
   services?: {
     title: string
     price: number
+    estimated_duration?: number
   }
   rating?: number
 }

@@ -370,24 +370,39 @@ export const AdminChatScreen: React.FC<{ navigation: any }> = ({ navigation: _na
     </TouchableOpacity>
   )
 
-  const renderMessage = ({ item }: { item: Message }) => (
-    <View
-      style={[
-        styles.messageContainer,
-        item.senderId === user?.id ? styles.adminMessageContainer : styles.userMessageContainer,
-      ]}
-    >
+  const handleMessagePress = (text: string) => {
+    const match = text.match(/No\. Pesanan:\s*(ORD-[A-Z0-9-]+)/i) || text.match(/(ORD-[A-Z0-9-]+)/i);
+    if (match && match[1]) {
+      const orderNumber = match[1];
+      _navigation.navigate('AdminDashboard', { orderNumberToOpen: orderNumber });
+    }
+  }
+
+  const renderMessage = ({ item }: { item: Message }) => {
+    const isClickable = item.text.includes('ORD-');
+    
+    return (
       <View
         style={[
-          styles.messageBubble,
-          item.senderId === user?.id ? styles.adminMessage : styles.userMessage,
+          styles.messageContainer,
+          item.senderId === user?.id ? styles.adminMessageContainer : styles.userMessageContainer,
         ]}
       >
-        <Text style={styles.messageText}>{item.text}</Text>
-        <Text style={styles.timestamp}>{formatTime(item.timestamp)}</Text>
+        <TouchableOpacity
+          activeOpacity={isClickable ? 0.7 : 1}
+          onPress={isClickable ? () => handleMessagePress(item.text) : undefined}
+          style={[
+            styles.messageBubble,
+            item.senderId === user?.id ? styles.adminMessage : styles.userMessage,
+            isClickable && { borderColor: '#F59E0B', borderWidth: 1 }
+          ]}
+        >
+          <Text style={styles.messageText}>{item.text}</Text>
+          <Text style={styles.timestamp}>{formatTime(item.timestamp)}</Text>
+        </TouchableOpacity>
       </View>
-    </View>
-  )
+    )
+  }
 
   if (view === 'list') {
     return (
