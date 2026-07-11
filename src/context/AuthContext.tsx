@@ -67,10 +67,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   content: {
                     title: `Pesan Baru dari ${senderPrefix}${sender.name}`,
                     body: payload.new.message,
-                    sound: true,
+                    sound: 'bookingsound',
                     priority: Notifications.AndroidNotificationPriority.HIGH,
                   },
-                  trigger: null,
+                  trigger: {
+                    channelId: 'booking-channel',
+                  },
                 }).catch(console.error);
               }
             } catch (err) {

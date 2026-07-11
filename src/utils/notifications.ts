@@ -20,11 +20,12 @@ export async function registerForPushNotificationsAsync() {
   }
 
   if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('default', {
-      name: 'default',
+    await Notifications.setNotificationChannelAsync('booking-channel', {
+      name: 'Booking Notifications',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#F59E0B',
+      sound: 'bookingsound',
     });
   }
 
@@ -77,7 +78,8 @@ export async function sendPushNotification(expoPushToken: string, title: string,
 
   const message = {
     to: expoPushToken,
-    sound: 'default',
+    sound: 'bookingsound.mp3', // Push payload requires extension
+    channelId: 'booking-channel',
     title: title,
     body: body,
     data: data,

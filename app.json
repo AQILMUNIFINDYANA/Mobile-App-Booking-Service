@@ -30,6 +30,12 @@
     },
     "plugins": [
       [
+        "expo-notifications",
+        {
+          "sounds": ["./assets/bookingsound.mp3"]
+        }
+      ],
+      [
         "expo-location",
         {
           "locationAlwaysAndWhenInUsePermissions": "Allow ESGUL Service Pro to access your location."
