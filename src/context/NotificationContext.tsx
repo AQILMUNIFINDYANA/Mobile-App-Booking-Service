@@ -46,7 +46,13 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
         action,
       }
 
-      setNotifications((prev) => [...prev, notification])
+      setNotifications((prev) => {
+        // Prevent duplicate messages if the user spams
+        if (prev.some(n => n.message === message)) {
+          return prev;
+        }
+        return [...prev, notification];
+      })
 
       if (duration > 0) {
         setTimeout(() => {

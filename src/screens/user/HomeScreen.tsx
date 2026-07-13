@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert } from 'react-native'
+import { useFocusEffect } from '@react-navigation/native'
 import { TextInput, Button } from 'react-native-paper'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons'
@@ -37,12 +38,87 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const [services, setServices] = useState<Service[]>([])
   const [loading, setLoading] = useState(true)
   const [userName, setUserName] = useState('User')
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!user?.id) return
+
+      const fetchUnread = async () => {
+        const { count: activeCount } = await supabase
+          .from('bookings')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .in('status', ['Confirmed', 'In Progress'])
+          
+        if (!activeCount || activeCount === 0) {
+          setUnreadCount(0)
+          return
+        }
+
+        const { count } = await supabase
+          .from('chat_messages')
+          .select('*', { count: 'exact', head: true })
+          .eq('receiver_id', user.id)
+          .eq('read', false)
+        
+        setUnreadCount(count || 0)
+      }
+
+      fetchUnread()
+    }, [user?.id])
+  )
 
   useEffect(() => {
     loadReviewCount()
     fetchUserData()
     fetchBookings()
     fetchServices()
+
+    if (!user?.id) return
+
+    const fetchUnread = async () => {
+      const { count: activeCount } = await supabase
+        .from('bookings')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .in('status', ['Confirmed', 'In Progress'])
+        
+      if (!activeCount || activeCount === 0) {
+        setUnreadCount(0)
+        return
+      }
+
+      const { count } = await supabase
+        .from('chat_messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('receiver_id', user.id)
+        .eq('read', false)
+      
+      setUnreadCount(count || 0)
+    }
+
+    fetchUnread()
+
+    const subscription = supabase
+      .channel('user-unread-messages')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'chat_messages',
+          filter: `receiver_id=eq.${user.id}`,
+        },
+        () => {
+          fetchUnread()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(subscription)
+    }
   }, [user?.id])
 
   const fetchServices = async () => {
@@ -288,7 +364,14 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
               style={styles.actionButton}
               onPress={() => navigation.navigate('Chat')}
             >
-              <MaterialCommunityIcons name="chat-outline" size={28} color="#F59E0B" />
+              <View>
+                <MaterialCommunityIcons name="chat-outline" size={28} color="#F59E0B" />
+                {unreadCount > 0 && (
+                  <View style={{ position: 'absolute', top: -5, right: -10, backgroundColor: '#EF4444', borderRadius: 10, minWidth: 20, height: 20, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4, borderWidth: 2, borderColor: '#1A1D24' }}>
+                    <Text style={{ color: 'white', fontSize: 10, fontWeight: 'bold' }}>{unreadCount}</Text>
+                  </View>
+                )}
+              </View>
               <Text style={styles.actionLabel} numberOfLines={1}>Chat</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -323,11 +406,11 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                 <View style={styles.appointmentMeta}>
                   <View style={styles.metaItem}>
                     <MaterialCommunityIcons name="calendar" size={14} color="#8a8a8a" />
-                    <Text style={styles.appointmentMetaText}>{upcomingBookings[0].booking_date}</Text>
+                    <Text style={styles.appointmentMetaText}>{upcomingBookings[0].booking_date?.split('-').reverse().join('-')}</Text>
                   </View>
                   <View style={styles.metaItem}>
                     <MaterialCommunityIcons name="clock-outline" size={14} color="#8a8a8a" />
-                    <Text style={styles.appointmentMetaText}>{upcomingBookings[0].booking_time}</Text>
+                    <Text style={styles.appointmentMetaText}>{upcomingBookings[0].booking_time?.substring(0, 5)}</Text>
                   </View>
                 </View>
               </View>
@@ -438,11 +521,11 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                   <View style={styles.bookingInfoMeta}>
                     <View style={styles.metaItem}>
                       <MaterialCommunityIcons name="calendar" size={14} color="#8a8a8a" />
-                      <Text style={styles.bookingInfoMetaText}>{lastBooking.booking_date}</Text>
+                      <Text style={styles.bookingInfoMetaText}>{lastBooking.booking_date?.split('-').reverse().join('-')}</Text>
                     </View>
                     <View style={styles.metaItem}>
                       <MaterialCommunityIcons name="clock-outline" size={14} color="#8a8a8a" />
-                      <Text style={styles.bookingInfoMetaText}>{lastBooking.booking_time}</Text>
+                      <Text style={styles.bookingInfoMetaText}>{lastBooking.booking_time?.substring(0, 5)}</Text>
                     </View>
                   </View>
                 </View>

@@ -14,6 +14,7 @@ interface Service {
 
 export const ServiceCatalogScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const [services, setServices] = useState<Service[]>([])
+  const [serviceRatings, setServiceRatings] = useState<Record<string, { average: number; count: number }>>({})
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -26,6 +27,34 @@ export const ServiceCatalogScreen: React.FC<{ navigation: any }> = ({ navigation
 
         if (error) throw error
         setServices(data || [])
+
+        // Fetch reviews to calculate average rating per service
+        const { data: reviewsData } = await supabase
+          .from('reviews')
+          .select('rating, bookings!inner(service_id)')
+
+        const ratingsMap: Record<string, { average: number; count: number }> = {}
+        if (reviewsData) {
+          const tempMap: Record<string, { total: number; count: number }> = {}
+          reviewsData.forEach((review: any) => {
+            const serviceId = review.bookings?.service_id
+            if (serviceId) {
+              if (!tempMap[serviceId]) {
+                tempMap[serviceId] = { total: 0, count: 0 }
+              }
+              tempMap[serviceId].total += review.rating
+              tempMap[serviceId].count += 1
+            }
+          })
+          
+          Object.keys(tempMap).forEach(key => {
+            ratingsMap[key] = {
+              average: tempMap[key].total / tempMap[key].count,
+              count: tempMap[key].count
+            }
+          })
+        }
+        setServiceRatings(ratingsMap)
       } catch (error) {
         console.log('Error fetching services:', error)
       } finally {
@@ -72,6 +101,17 @@ export const ServiceCatalogScreen: React.FC<{ navigation: any }> = ({ navigation
               <View key={service.id} style={styles.serviceCard}>
                 <View style={styles.cardHeader}>
                   <Text style={styles.serviceTitle}>{service.title}</Text>
+                  {serviceRatings[service.id] && serviceRatings[service.id].count > 0 && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(76, 175, 80, 0.1)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 }}>
+                      <MaterialCommunityIcons name="star" size={14} color="#4CAF50" />
+                      <Text style={{ color: '#4CAF50', fontSize: 13, fontWeight: 'bold' }}>
+                        {serviceRatings[service.id].average.toFixed(1)}
+                      </Text>
+                      <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>
+                        ({serviceRatings[service.id].count})
+                      </Text>
+                    </View>
+                  )}
                 </View>
 
                 <Text style={styles.serviceDescription}>

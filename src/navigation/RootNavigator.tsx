@@ -3,8 +3,9 @@ import { NavigationContainer } from '@react-navigation/native'
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 import { Ionicons } from '@expo/vector-icons'
-import { View, Platform, Animated, Text } from 'react-native'
+import { View, Platform, Animated, Text, DeviceEventEmitter } from 'react-native'
 import { useAuth } from '../context/AuthContext'
+import { supabase } from '../services/supabaseClient'
 
 import { LoginScreen } from '../screens/auth/LoginScreen'
 import { RegisterScreen } from '../screens/auth/RegisterScreen'
@@ -189,41 +190,108 @@ const UserNavigator = () => (
   </Stack.Navigator>
 )
 
-const AdminTabNavigator = () => (
-  <Tab.Navigator
-    screenOptions={({ route }) => ({
-      headerShown: false,
-      tabBarIcon: ({ focused, color }) => {
-        let iconName: any
-        if (route.name === 'AdminDashboard') iconName = focused ? 'speedometer' : 'speedometer'
-        else if (route.name === 'AdminChat') iconName = focused ? 'chatbubble' : 'chatbubble-outline'
-        return <AnimatedTabIcon name={iconName} color={color} focused={focused} />
-      },
-      tabBarActiveTintColor: '#F59E0B',
-      tabBarInactiveTintColor: '#666',
-      tabBarStyle: {
-        backgroundColor: '#1f1f1f',
-        borderTopColor: '#8B6914',
-        borderTopWidth: 2,
-        paddingTop: 8,
-        paddingBottom: Platform.OS === 'ios' ? 28 : 10,
-        height: Platform.OS === 'ios' ? 88 : 64,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 10,
-      },
-      tabBarLabelStyle: {
-        fontSize: 12,
-        fontWeight: '500',
-      },
-    })}
-  >
-    <Tab.Screen name="AdminDashboard" component={AdminDashboardScreen} />
-    <Tab.Screen name="AdminChat" component={AdminChatScreen} />
-  </Tab.Navigator>
-)
+const AdminTabNavigator = () => {
+  const { user } = useAuth()
+  const [unreadCount, setUnreadCount] = React.useState(0)
+
+  React.useEffect(() => {
+    if (!user?.id) return
+
+    const fetchUnread = async () => {
+      const { data: activeBookings } = await supabase
+        .from('bookings')
+        .select('user_id')
+        .in('status', ['Confirmed', 'In Progress'])
+        
+      const activeUserIds = activeBookings?.map(b => b.user_id) || []
+      
+      if (activeUserIds.length === 0) {
+        setUnreadCount(0)
+        return
+      }
+
+      const { count } = await supabase
+        .from('chat_messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('receiver_id', user.id)
+        .eq('read', false)
+        .in('sender_id', activeUserIds)
+      
+      setUnreadCount(count || 0)
+    }
+
+    fetchUnread()
+
+    const subscription = supabase
+      .channel('admin-unread-messages')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'chat_messages',
+          filter: `receiver_id=eq.${user.id}`,
+        },
+        () => {
+          fetchUnread()
+        }
+      )
+      .subscribe()
+
+    const readSubscription = DeviceEventEmitter.addListener('messagesRead', () => {
+      fetchUnread()
+    })
+
+    return () => {
+      supabase.removeChannel(subscription)
+      readSubscription.remove()
+    }
+  }, [user?.id])
+
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarIcon: ({ focused, color }) => {
+          let iconName: any
+          if (route.name === 'AdminDashboard') iconName = focused ? 'speedometer' : 'speedometer'
+          else if (route.name === 'AdminChat') iconName = focused ? 'chatbubble' : 'chatbubble-outline'
+          return <AnimatedTabIcon name={iconName} color={color} focused={focused} />
+        },
+        tabBarActiveTintColor: '#F59E0B',
+        tabBarInactiveTintColor: '#666',
+        tabBarStyle: {
+          backgroundColor: '#1f1f1f',
+          borderTopColor: '#8B6914',
+          borderTopWidth: 2,
+          paddingTop: 8,
+          paddingBottom: Platform.OS === 'ios' ? 28 : 10,
+          height: Platform.OS === 'ios' ? 88 : 64,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.3,
+          shadowRadius: 8,
+          elevation: 10,
+        },
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: '500',
+        },
+      })}
+    >
+      <Tab.Screen name="AdminDashboard" component={AdminDashboardScreen} options={{ tabBarLabel: 'Dashboard' }} />
+      <Tab.Screen 
+        name="AdminChat" 
+        component={AdminChatScreen} 
+        options={{
+          tabBarLabel: 'AdminChat',
+          tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+          tabBarBadgeStyle: { backgroundColor: '#EF4444', color: 'white', fontSize: 10 }
+        }}
+      />
+    </Tab.Navigator>
+  )
+}
 
 const AdminNavigator = () => (
   <Stack.Navigator

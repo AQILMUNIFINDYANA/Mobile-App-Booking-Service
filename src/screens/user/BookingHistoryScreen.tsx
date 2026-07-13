@@ -22,8 +22,9 @@ interface Booking {
   vehicle_type?: string
   vehicle_brand?: string
   vehicle_plate?: string
-  services?: { title: string; price: number }
+  services?: { title: string; price: number; estimated_duration?: number }
   reviews?: { id: string; rating: number; review_text: string }[]
+  created_at?: string
 }
 
 export const BookingHistoryScreen: React.FC = () => {
@@ -308,11 +309,11 @@ export const BookingHistoryScreen: React.FC = () => {
         <View style={styles.infoSection}>
           <View style={styles.infoItem}>
             <MaterialCommunityIcons name="calendar" size={14} color="#8a8a8a" />
-            <Text style={styles.infoLabel}>{item.booking_date}</Text>
+            <Text style={styles.infoLabel}>{item.booking_date?.split('-').reverse().join('-')}</Text>
           </View>
           <View style={styles.infoItem}>
             <MaterialCommunityIcons name="clock-outline" size={14} color="#8a8a8a" />
-            <Text style={styles.infoLabel}>{item.booking_time}</Text>
+            <Text style={styles.infoLabel}>{item.booking_time?.substring(0, 5)}</Text>
           </View>
         </View>
 
@@ -449,11 +450,11 @@ export const BookingHistoryScreen: React.FC = () => {
                    <View style={styles.bookingInfoMeta}>
                      <View style={styles.metaItem}>
                        <MaterialCommunityIcons name="calendar" size={14} color="#8a8a8a" />
-                        <Text style={styles.bookingInfoMetaText}>{selectedBooking.booking_date}</Text>
+                        <Text style={styles.bookingInfoMetaText}>{selectedBooking.booking_date?.split('-').reverse().join('-')}</Text>
                      </View>
                      <View style={styles.metaItem}>
                        <MaterialCommunityIcons name="clock-outline" size={14} color="#8a8a8a" />
-                        <Text style={styles.bookingInfoMetaText}>{selectedBooking.booking_time}</Text>
+                        <Text style={styles.bookingInfoMetaText}>{selectedBooking.booking_time?.substring(0, 5)}</Text>
                      </View>
                    </View>
                  </View>
@@ -567,8 +568,8 @@ export const BookingHistoryScreen: React.FC = () => {
                   <View style={styles.modalSection}>
                     <Text style={styles.modalSectionTitle}>Waktu Booking</Text>
                     <View style={{ gap: 8, marginTop: 8 }}>
-                      <Text style={{ color: '#e0e0e0', fontSize: 14 }}>Tanggal : {selectedDetailBooking.booking_date}</Text>
-                      <Text style={{ color: '#e0e0e0', fontSize: 14 }}>Jam : {selectedDetailBooking.booking_time}</Text>
+                      <Text style={{ color: '#e0e0e0', fontSize: 14 }}>Tanggal : {selectedDetailBooking.booking_date?.split('-').reverse().join('-')}</Text>
+                      <Text style={{ color: '#e0e0e0', fontSize: 14 }}>Jam : {selectedDetailBooking.booking_time?.substring(0, 5)}</Text>
                       <Text style={{ color: '#F59E0B', fontSize: 12, fontStyle: 'italic', marginTop: 4 }}>
                         * Mohon datang 10 menit sebelum waktu booking agar tidak terlambat.
                       </Text>

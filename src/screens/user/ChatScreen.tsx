@@ -43,7 +43,6 @@ export const ChatScreen: React.FC<{ navigation: any, route?: any }> = ({ navigat
   const [newMessage, setNewMessage] = useState(route?.params?.prefillMessage || '')
   const [showInfo, setShowInfo] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
   const [sending, setSending] = useState(false)
   const [isOtherTyping, setIsOtherTyping] = useState(false)
   const flatListRef = useRef<FlatList>(null)
@@ -163,18 +162,14 @@ export const ChatScreen: React.FC<{ navigation: any, route?: any }> = ({ navigat
           .from('chat_messages')
           .update({ read: true })
           .in('id', unreadMessageIds)
+          
+        DeviceEventEmitter.emit('messagesRead')
       }
     } catch (error) {
       console.log('Error loading messages:', error)
     } finally {
       setLoading(false)
     }
-  }
-
-  const onRefresh = async () => {
-    setRefreshing(true)
-    await loadMessages()
-    setRefreshing(false)
   }
 
   useEffect(() => {

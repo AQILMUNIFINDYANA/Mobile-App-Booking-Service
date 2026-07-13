@@ -47,7 +47,6 @@ export const AdminChatScreen: React.FC<{ navigation: any }> = ({ navigation: _na
   const [messages, setMessages] = useState<Message[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
   const [sending, setSending] = useState(false)
   const [chatLoading, setChatLoading] = useState(false)
   const [isOtherTyping, setIsOtherTyping] = useState(false)
@@ -184,16 +183,6 @@ export const AdminChatScreen: React.FC<{ navigation: any }> = ({ navigation: _na
     }
   }
 
-  const onRefresh = async () => {
-    setRefreshing(true)
-    if (view === 'list') {
-      await loadChatUsers()
-    } else if (selectedUser) {
-      await loadMessages(selectedUser.id)
-    }
-    setRefreshing(false)
-  }
-
   const loadMessages = async (userId: string) => {
     try {
       const { data, error } = await supabase
@@ -225,6 +214,9 @@ export const AdminChatScreen: React.FC<{ navigation: any }> = ({ navigation: _na
           .update({ read: true })
           .in('id', unreadMessageIds)
         
+        if (!updateError) {
+          DeviceEventEmitter.emit('messagesRead')
+        }
         if (updateError) {
           console.log('❌ Failed to mark messages as read. This is likely an RLS Policy issue in Supabase! error:', updateError)
         }

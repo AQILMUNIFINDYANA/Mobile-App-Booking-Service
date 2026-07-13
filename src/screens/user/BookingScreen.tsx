@@ -31,7 +31,7 @@ export const BookingScreen: React.FC<{ route?: any; navigation: any }> = ({ rout
 
   const [services, setServices] = useState<Service[]>([])
   const [serviceMenuVisible, setServiceMenuVisible] = useState(false)
-  const [vehicleMenuVisible, setVehicleMenuVisible] = useState(false)
+
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [showTimePicker, setShowTimePicker] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)

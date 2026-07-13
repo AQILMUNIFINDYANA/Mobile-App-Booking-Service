@@ -37,7 +37,7 @@ export const NotificationOverlay: React.FC = () => {
             <View style={styles.bannerContent}>
               <MaterialCommunityIcons name={config.icon as any} size={24} color={config.color} />
               <View style={styles.bannerText}>
-                <Text variant="bodyMedium" style={{ fontWeight: '600' }}>
+                <Text variant="bodyMedium" style={{ fontWeight: '600', color: '#1A1C1E' }}>
                   {notification.message}
                 </Text>
               </View>

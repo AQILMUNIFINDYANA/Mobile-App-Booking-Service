@@ -3,15 +3,12 @@ import {
   View,
   StyleSheet,
   ScrollView,
-  FlatList,
   Text,
   Alert,
   TouchableOpacity,
   Modal,
-  ActivityIndicator,
   RefreshControl,
   Vibration,
-  Platform,
   Animated,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -46,7 +43,7 @@ interface AdminBooking {
   queue_number?: number
   order_number?: string
   vehicle_type?: string
-  services?: { title: string }
+  services?: { title: string; estimated_duration?: number }
   created_at?: string
 }
 
@@ -89,7 +86,7 @@ export const AdminDashboardScreen: React.FC = () => {
     totalServices: services.length,
   }
   const [loading, setLoading] = useState(true)
-  const [highlightedOrderNumber, setHighlightedOrderNumber] = useState<string | null>(null)
+  const [highlightedBookingId, setHighlightedBookingId] = useState<string | null>(null)
   const [pendingScrollIndex, setPendingScrollIndex] = useState<number | null>(null)
   const scrollViewRef = useRef<ScrollView>(null)
   const pulseAnim = useRef(new Animated.Value(0)).current
@@ -100,7 +97,7 @@ export const AdminDashboardScreen: React.FC = () => {
       const orderToOpen = bookings.find(b => b.order_number?.toUpperCase() === searchOrder)
       if (orderToOpen) {
         setActiveTab('bookings')
-        setHighlightedOrderNumber(orderToOpen.order_number)
+        setHighlightedBookingId(orderToOpen.id)
         
         const index = bookings.findIndex(b => b.order_number?.toUpperCase() === searchOrder)
         if (index !== -1) {
@@ -119,9 +116,9 @@ export const AdminDashboardScreen: React.FC = () => {
   useEffect(() => {
     if (pendingScrollIndex !== null && activeTab === 'bookings') {
       const timer = setTimeout(() => {
-        const orderNumber = bookings[pendingScrollIndex]?.order_number;
-        const itemY = (orderNumber && itemLayouts.current[orderNumber] !== undefined) 
-          ? itemLayouts.current[orderNumber] 
+        const bookingId = bookings[pendingScrollIndex]?.id;
+        const itemY = (bookingId && itemLayouts.current[bookingId] !== undefined) 
+          ? itemLayouts.current[bookingId] 
           : pendingScrollIndex * 220;
         
         scrollViewRef.current?.scrollTo({ 
@@ -132,22 +129,23 @@ export const AdminDashboardScreen: React.FC = () => {
       }, 800)
       return () => clearTimeout(timer)
     }
+    return undefined;
   }, [pendingScrollIndex, activeTab, bookings])
 
   useEffect(() => {
-    if (highlightedOrderNumber) {
+    if (highlightedBookingId) {
       pulseAnim.setValue(0);
       const animation = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
             toValue: 1,
             duration: 1200,
-            useNativeDriver: false,
+            useNativeDriver: true,
           }),
           Animated.timing(pulseAnim, {
             toValue: 0,
             duration: 1200,
-            useNativeDriver: false,
+            useNativeDriver: true,
           })
         ])
       );
@@ -157,7 +155,8 @@ export const AdminDashboardScreen: React.FC = () => {
         animation.stop();
       };
     }
-  }, [highlightedOrderNumber]);
+    return undefined;
+  }, [highlightedBookingId]);
 
   useEffect(() => {
     fetchDashboardData()
@@ -205,7 +204,8 @@ export const AdminDashboardScreen: React.FC = () => {
       const [bookingsData, servicesDataResult, reviewsData] = await Promise.all([
         supabase
           .from('bookings')
-          .select('id, user_id, service_id, booking_date, booking_time, status, vehicle_brand, vehicle_plate, notes, queue_number, order_number, vehicle_type, created_at, users(name), services(title, estimated_duration)'),
+          .select('id, user_id, service_id, booking_date, booking_time, status, vehicle_brand, vehicle_plate, notes, queue_number, order_number, vehicle_type, created_at, users(name), services(title, estimated_duration)')
+          .order('created_at', { ascending: false }),
         supabase
           .from('services')
           .select('id, title, description, price, estimated_duration'),
@@ -315,13 +315,16 @@ export const AdminDashboardScreen: React.FC = () => {
       let updatePayload: any = { status: newStatus }
 
       if (newStatus === 'Confirmed' && !currentBooking.order_number) {
-        const { count: dailyCount, error: countError } = await supabase
+        const { data: maxQueueData } = await supabase
           .from('bookings')
-          .select('*', { count: 'exact', head: true })
+          .select('queue_number')
           .eq('booking_date', currentBooking.booking_date)
           .not('order_number', 'is', null)
+          .order('queue_number', { ascending: false })
+          .limit(1)
 
-        const queueNumber = (dailyCount || 0) + 1
+        const maxQueue = maxQueueData && maxQueueData.length > 0 ? maxQueueData[0].queue_number : 0;
+        const queueNumber = maxQueue + 1;
         const dateStr = currentBooking.booking_date.replace(/-/g, '')
         const orderNumber = `ORD-${dateStr}-${queueNumber.toString().padStart(3, '0')}`
 
@@ -553,13 +556,13 @@ export const AdminDashboardScreen: React.FC = () => {
 
 
   const renderBooking = ({ item }: { item: AdminBooking }) => {
-    const isHighlighted = highlightedOrderNumber && highlightedOrderNumber === item.order_number;
+    const isHighlighted = highlightedBookingId && highlightedBookingId === item.id;
     
     return (
     <View 
       style={styles.bookingCard}
       onLayout={(e) => {
-        itemLayouts.current[item.order_number] = e.nativeEvent.layout.y;
+        itemLayouts.current[item.id] = e.nativeEvent.layout.y;
       }}
     >
       {/* Absolute precise glow overlay */}
@@ -572,13 +575,11 @@ export const AdminDashboardScreen: React.FC = () => {
               top: -1, left: -1, right: -1, bottom: -1,
               borderRadius: 20,
               borderWidth: 2,
-              borderColor: pulseAnim.interpolate({
+              borderColor: '#F59E0B',
+              backgroundColor: 'rgba(245, 158, 11, 0.08)',
+              opacity: pulseAnim.interpolate({
                 inputRange: [0, 1],
-                outputRange: ['rgba(245, 158, 11, 0.2)', 'rgba(245, 158, 11, 1)']
-              }),
-              backgroundColor: pulseAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: ['rgba(245, 158, 11, 0.02)', 'rgba(245, 158, 11, 0.12)']
+                outputRange: [0.3, 1]
               })
             }
           ]}
@@ -588,7 +589,14 @@ export const AdminDashboardScreen: React.FC = () => {
         {/* Top Row: User + Status */}
         <View style={styles.topRow}>
           <View style={styles.userSection}>
-            <Text style={styles.userName}>{item.users?.name || 'Unknown'}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={styles.userName}>{item.users?.name || 'Unknown'}</Text>
+              {item.status === 'Pending' && (
+                <View style={{ backgroundColor: '#EF4444', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                  <Text style={{ color: 'white', fontSize: 9, fontWeight: 'bold' }}>BARU</Text>
+                </View>
+              )}
+            </View>
             <Text style={styles.serviceText}>{item.services?.title || 'Service'}</Text>
           </View>
           <View
@@ -607,11 +615,11 @@ export const AdminDashboardScreen: React.FC = () => {
         <View style={styles.detailsRow}>
           <View style={styles.detailItem}>
             <MaterialCommunityIcons name="calendar" size={16} color="#F59E0B" />
-            <Text style={styles.detail}>{item.booking_date}</Text>
+            <Text style={styles.detail}>{item.booking_date ? item.booking_date.split('-').reverse().join('-') : '-'}</Text>
           </View>
           <View style={styles.detailItem}>
             <MaterialCommunityIcons name="clock-outline" size={16} color="#F59E0B" />
-            <Text style={styles.detail}>{item.booking_time}</Text>
+            <Text style={styles.detail}>{item.booking_time ? item.booking_time.substring(0, 5) : '-'}</Text>
           </View>
         </View>
 
@@ -751,8 +759,25 @@ export const AdminDashboardScreen: React.FC = () => {
   )
 
   const renderReview = ({ item }: { item: Review }) => {
+    const handlePressReview = () => {
+      const relatedBooking = bookings.find(b => b.id === item.booking_id)
+      if (relatedBooking) {
+        setActiveTab('bookings')
+        setHighlightedBookingId(relatedBooking.id)
+        
+        const index = bookings.findIndex(b => b.id === relatedBooking.id)
+        if (index !== -1) {
+          setPendingScrollIndex(index)
+        }
+      }
+    }
+
     return (
-      <View style={styles.bookingCard}>
+      <TouchableOpacity 
+        style={styles.bookingCard}
+        activeOpacity={0.7}
+        onPress={handlePressReview}
+      >
         <View style={styles.cardInner}>
           <View style={styles.topRow}>
             <View style={styles.userSection}>
@@ -782,7 +807,7 @@ export const AdminDashboardScreen: React.FC = () => {
             </Text>
           </View>
         </View>
-      </View>
+      </TouchableOpacity>
     )
   }
 
@@ -810,14 +835,23 @@ export const AdminDashboardScreen: React.FC = () => {
             style={[styles.tabButton, activeTab === tab && styles.activeTabButton]}
             onPress={() => setActiveTab(tab)}
           >
-            <Text
-              style={[
-                styles.tabButtonText,
-                activeTab === tab && styles.activeTabButtonText,
-              ]}
-            >
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 24, gap: 6 }}>
+              <Text
+                style={[
+                  styles.tabButtonText,
+                  activeTab === tab && styles.activeTabButtonText,
+                ]}
+              >
+                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              </Text>
+              {tab === 'bookings' && stats.pendingBookings > 0 && (
+                <View style={{ backgroundColor: '#EF4444', borderRadius: 12, minWidth: 20, height: 20, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 6, shadowColor: '#EF4444', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.5, shadowRadius: 3, elevation: 4 }}>
+                  <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '900', includeFontPadding: false, textAlign: 'center', lineHeight: 14 }}>
+                    {stats.pendingBookings}
+                  </Text>
+                </View>
+              )}
+            </View>
           </TouchableOpacity>
         ))}
       </View>
@@ -827,8 +861,8 @@ export const AdminDashboardScreen: React.FC = () => {
         ref={scrollViewRef}
         style={styles.content}
         showsVerticalScrollIndicator={false}
-        onScrollBeginDrag={() => setHighlightedOrderNumber(null)}
-        onTouchStart={() => setHighlightedOrderNumber(null)}
+        onScrollBeginDrag={() => setHighlightedBookingId(null)}
+        onTouchStart={() => setHighlightedBookingId(null)}
         refreshControl={
           <RefreshControl
             refreshing={loading}
@@ -880,7 +914,7 @@ export const AdminDashboardScreen: React.FC = () => {
                 <View style={styles.progressHeader}>
                   <Text style={styles.progressTitle}>Booking Progress</Text>
                   <Text style={styles.progressPercent}>
-                    {Math.round((stats.completedBookings / stats.totalBookings) * 100)}%
+                    {stats.totalBookings > 0 ? Math.round((stats.completedBookings / stats.totalBookings) * 100) : 0}%
                   </Text>
                 </View>
                 <View style={styles.progressBar}>
@@ -888,7 +922,7 @@ export const AdminDashboardScreen: React.FC = () => {
                     style={[
                       styles.progressFill,
                       {
-                        width: `${(stats.completedBookings / stats.totalBookings) * 100}%`,
+                        width: `${stats.totalBookings > 0 ? (stats.completedBookings / stats.totalBookings) * 100 : 0}%`,
                       },
                     ]}
                   />
@@ -960,7 +994,11 @@ export const AdminDashboardScreen: React.FC = () => {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.quickStatTitle}>Avg. Rating</Text>
-                  <Text style={styles.quickStatValue}>4.8</Text>
+                  <Text style={styles.quickStatValue}>
+                    {reviews.length > 0 
+                      ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)
+                      : '0.0'}
+                  </Text>
                 </View>
                 <MaterialCommunityIcons name="chevron-right" size={24} color="#4CAF50" />
               </TouchableOpacity>
@@ -1246,8 +1284,10 @@ export const AdminDashboardScreen: React.FC = () => {
                   
                   <View style={{ marginBottom: 16 }}>
                     <Text style={{ fontSize: 13, fontWeight: '700', color: '#ffffff', marginBottom: 8 }}>Waktu Booking</Text>
-                    <Text style={{ color: '#e0e0e0', fontSize: 14 }}>Tanggal : {selectedDetailBooking.booking_date}</Text>
-                    <Text style={{ color: '#e0e0e0', fontSize: 14 }}>Jam : {selectedDetailBooking.booking_time}</Text>
+                    <View style={{ gap: 8, marginTop: 8 }}>
+                      <Text style={{ color: '#e0e0e0', fontSize: 14 }}>Tanggal : {selectedDetailBooking.booking_date ? selectedDetailBooking.booking_date.split('-').reverse().join('-') : '-'}</Text>
+                      <Text style={{ color: '#e0e0e0', fontSize: 14 }}>Jam : {selectedDetailBooking.booking_time ? selectedDetailBooking.booking_time.substring(0, 5) : '-'}</Text>
+                    </View>
                   </View>
 
                   <View style={{ marginBottom: 16 }}>
