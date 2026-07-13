@@ -32,7 +32,7 @@
       [
         "expo-notifications",
         {
-          "sounds": ["./assets/bookingsound.mp3"]
+          "sounds": ["./assets/aminotif.mp3"]
         }
       ],
       [
